@@ -36,11 +36,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setLoading(false);
   }, []);
 
+  // Utilisateur actuellement chargé : on ne recharge le profil que s'il change.
+  // (Supabase renvoie « SIGNED_IN » à chaque retour sur l'onglet / l'appli : avant, toute
+  // l'application se rechargeait et affichait le sablier à chaque fois.)
+  const userRef = useRef<string | null | undefined>(undefined);
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => { setSession(data.session); load(data.session); });
     const { data: sub } = supabase.auth.onAuthStateChange((evt, s) => {
-      if (evt === 'TOKEN_REFRESHED') { setSession(s); return; }
-      setSession(s); setLoading(true); setTimeout(() => load(s), 0);
+      setSession(s);
+      const uid = s?.user.id ?? null;
+      if (uid === userRef.current && evt !== 'USER_UPDATED') return;
+      const first = userRef.current === undefined;
+      userRef.current = uid;
+      if (!first) setLoading(true);
+      setTimeout(() => load(s), 0);
     });
     return () => sub.subscription.unsubscribe();
   }, [load]);
@@ -49,6 +57,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const refresh = useCallback(async () => {
     const { data } = await supabase.auth.getSession();
     setSession(data.session);
+    userRef.current = data.session?.user.id ?? null;
     await load(data.session);
   }, [load]);
   // Déconnexion immédiate : on efface la session sur l'appareil sans attendre le serveur
@@ -76,15 +85,19 @@ export function useLoad<T>(fn: () => Promise<T>, deps: unknown[] = []) {
   const [data, setData] = useState<T | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const run = useCallback(async () => {
-    setLoading(true);
-    try { setData(await fn()); setError(null); }
+  const loaded = useRef(false);
+  // Premier chargement : sablier. Rechargements suivants (après une action) : en silence,
+  // l'écran reste affiché et se met à jour, sans clignoter.
+  const run = useCallback(async (silent = false) => {
+    if (!silent || !loaded.current) setLoading(true);
+    try { setData(await fn()); setError(null); loaded.current = true; }
     catch (e) { setError((e as Error).message); }
     finally { setLoading(false); }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, deps);
   useEffect(() => { run(); }, [run]);
-  return { data, error, loading, reload: run, setData };
+  const reload = useCallback(() => run(true), [run]);
+  return { data, error, loading, reload, setData };
 }
 
 /** Lève l'erreur Supabase si présente, sinon renvoie les données. */

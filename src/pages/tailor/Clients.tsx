@@ -124,7 +124,7 @@ export function ClientDetail() {
           {data.o.length ? <List>{data.o.map((o) => <Row key={o.id} onClick={() => nav(`/commandes/${o.id}`)} title={o.title} subtitle={`${o.number} · ${money(o.price)}`} right={stepPill(o.step)} />)}</List> : <Empty icon={ShoppingBag} tone="indigo">Aucune commande.</Empty>}
         </Section>
         <Section title="Devis">
-          {data.q.length ? <List>{data.q.map((q) => <Row key={q.id} title={q.title} subtitle={`${q.number} · ${money(q.total)}`} right={quotePill(q.status)} />)}</List> : <Empty icon={FileText} tone="violet">Aucun devis.</Empty>}
+          {data.q.length ? <List>{data.q.map((q) => <Row key={q.id} onClick={() => nav(`/devis/${q.id}`)} title={q.title} subtitle={`${q.number} · ${money(q.total)}`} right={quotePill(q.status)} />)}</List> : <Empty icon={FileText} tone="violet">Aucun devis.</Empty>}
         </Section>
       </div>
       <WhatsAppSheet open={!!wa} onClose={() => setWa(null)} to={c.full_name} phone={c.phone} text={wa ?? ''} />

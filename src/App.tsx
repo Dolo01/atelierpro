@@ -4,14 +4,36 @@ import { useAuth } from './lib/auth';
 import { accessOf } from './lib/types';
 import { Loading } from './components/ui';
 import { Shell, type NavItem } from './layouts/Shell';
-import Notifications from './pages/Notifications';
+import { lazy, Suspense, type ComponentType } from 'react';
 import { Invitation, Login, Pending, Signup, Suspended } from './pages/auth/AuthPages';
 import TailorHome, { SubscriptionBanner } from './pages/tailor/Home';
 import { ClientDetail, ClientMeasures as TailorMeasures, ClientNew, ClientsList } from './pages/tailor/Clients';
-import { OrderDetail, OrderNew, OrdersList, QuoteNew } from './pages/tailor/Orders';
+import { OrderDetail, OrderNew, OrdersList, QuoteDetail, QuoteNew } from './pages/tailor/Orders';
 import { Agenda, More, Reports, Staff, Subscription, WorkshopProfile } from './pages/tailor/More';
-import { ClientHome, ClientMeasures, ClientOrder, ClientOrders, ClientPayments, ClientQuote, ClientQuotes } from './pages/client/ClientPages';
-import { AdminHome, AdminLogs, AdminPayment, AdminPayments, AdminPlans, AdminSettings, AdminWorkshop, AdminWorkshops } from './pages/admin/AdminPages';
+import Notifications from './pages/Notifications';
+
+// Les espaces Client et Superadmin ne sont téléchargés que par ceux qui les utilisent :
+// l'appli du tailleur démarre plus vite sur téléphone.
+function lazyNamed<M, K extends keyof M>(load: () => Promise<M>, name: K) {
+  return lazy(() => load().then((m) => ({ default: m[name] as unknown as ComponentType })));
+}
+const clientPages = () => import('./pages/client/ClientPages');
+const adminPages = () => import('./pages/admin/AdminPages');
+const ClientHome = lazyNamed(clientPages, 'ClientHome');
+const ClientMeasures = lazyNamed(clientPages, 'ClientMeasures');
+const ClientOrder = lazyNamed(clientPages, 'ClientOrder');
+const ClientOrders = lazyNamed(clientPages, 'ClientOrders');
+const ClientPayments = lazyNamed(clientPages, 'ClientPayments');
+const ClientQuote = lazyNamed(clientPages, 'ClientQuote');
+const ClientQuotes = lazyNamed(clientPages, 'ClientQuotes');
+const AdminHome = lazyNamed(adminPages, 'AdminHome');
+const AdminLogs = lazyNamed(adminPages, 'AdminLogs');
+const AdminPayment = lazyNamed(adminPages, 'AdminPayment');
+const AdminPayments = lazyNamed(adminPages, 'AdminPayments');
+const AdminPlans = lazyNamed(adminPages, 'AdminPlans');
+const AdminSettings = lazyNamed(adminPages, 'AdminSettings');
+const AdminWorkshop = lazyNamed(adminPages, 'AdminWorkshop');
+const AdminWorkshops = lazyNamed(adminPages, 'AdminWorkshops');
 
 const tailorNav: NavItem[] = [
   { to: '/accueil', label: 'Accueil', icon: Home, tone: 'blue' },
@@ -82,6 +104,7 @@ function PublicOnly({ children }: { children: JSX.Element }) {
 
 export default function App() {
   return (
+    <Suspense fallback={<Loading />}>
     <Routes>
       <Route path="/" element={<Home0 />} />
       <Route path="/connexion" element={<PublicOnly><Login /></PublicOnly>} />
@@ -99,6 +122,7 @@ export default function App() {
         <Route path="/commandes/nouvelle" element={<OrderNew />} />
         <Route path="/commandes/:id" element={<OrderDetail />} />
         <Route path="/devis/nouveau" element={<QuoteNew />} />
+        <Route path="/devis/:id" element={<QuoteDetail />} />
         <Route path="/agenda" element={<Agenda />} />
         <Route path="/plus" element={<More />} />
         <Route path="/plus/abonnement" element={<Subscription />} />
@@ -133,6 +157,7 @@ export default function App() {
 
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
+    </Suspense>
   );
 }
 

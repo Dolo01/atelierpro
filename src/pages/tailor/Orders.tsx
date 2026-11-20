@@ -66,7 +66,7 @@ export function OrdersList() {
           subtitle={`${o.number} · ${o.title}${o.due_date ? ' · ' + dateFr(o.due_date, { day: 'numeric', month: 'short' }) : ''}`} right={stepPill(o.step)} />
       ))}</List> : <Empty icon={ShoppingBag} tone="violet">Rien dans cette liste.</Empty>}
       <Section title="Derniers devis">
-        {data.q.length ? <List>{data.q.map((q) => <Row key={q.id} title={name(q.client_id)} subtitle={`${q.number} · ${q.title} · ${money(q.total)}`} right={quotePill(q.status)} />)}</List> : <Empty icon={FileText} tone="violet">Aucun devis envoyé.</Empty>}
+        {data.q.length ? <List>{data.q.map((q) => <Row key={q.id} onClick={() => nav(`/devis/${q.id}`)} title={name(q.client_id)} subtitle={`${q.number} · ${q.title} · ${money(q.total)}`} right={quotePill(q.status)} />)}</List> : <Empty icon={FileText} tone="violet">Aucun devis envoyé.</Empty>}
       </Section>
     </div>
   );
@@ -166,7 +166,8 @@ export function OrderNew() {
   const { workshop } = useAuth();
   const [sp] = useSearchParams();
   const { data: clients, loading } = useClients();
-  const [f, setF] = useState({ client: sp.get('client') ?? '', title: '', fabric: '', price: '', due: '', deposit: '', method: 'Espèces' });
+  const quoteId = sp.get('devis');
+  const [f, setF] = useState({ client: sp.get('client') ?? '', title: sp.get('modele') ?? '', fabric: '', price: sp.get('prix') ?? '', due: '', deposit: sp.get('avance') ?? '', method: 'Espèces' });
   const [busy, setBusy] = useState(false);
   const set = (k: keyof typeof f) => (e: { target: { value: string } }) => setF({ ...f, [k]: e.target.value });
   if (loading) return <Loading />;
@@ -174,7 +175,7 @@ export function OrderNew() {
   const submit = async (e: FormEvent) => {
     e.preventDefault(); setBusy(true);
     const price = parseInt(f.price.replace(/\D/g, ''), 10) || 0;
-    const { data, error } = await supabase.from('orders').insert({ workshop_id: workshop!.id, client_id: f.client, title: f.title, fabric: f.fabric, price, due_date: f.due || null }).select().single();
+    const { data, error } = await supabase.from('orders').insert({ workshop_id: workshop!.id, client_id: f.client, quote_id: quoteId || null, title: f.title, fabric: f.fabric, price, due_date: f.due || null }).select().single();
     if (error) { setBusy(false); return toast(errMsg(error), 'err'); }
     const dep = parseInt(f.deposit.replace(/\D/g, ''), 10) || 0;
     if (dep > 0) await supabase.from('order_payments').insert({ workshop_id: workshop!.id, order_id: data.id, amount: dep, method: f.method, note: 'Avance' });
@@ -200,6 +201,61 @@ export function OrderNew() {
   );
 }
 
+/** Message WhatsApp d'un devis (envoi ou renvoi). */
+function quoteText(q: Quote, c: Client, workshopName?: string) {
+  return `Bonjour ${c.full_name.split(' ')[0]}, voici votre devis ${q.number} – ${q.title} :\n${q.lines.map((l) => `• ${l.label} : ${money(l.amount)}`).join('\n')}\nTotal : ${money(q.total)}\nAvance : ${money(q.deposit)} · Délai : ${q.delay}\n${c.user_id ? `\nAcceptez ou refusez-le dans votre espace : ${appUrl()}/espace/devis/${q.id}` : '\nRépondez à ce message pour confirmer.'}\n${workshopName ?? ''}`;
+}
+
+export function QuoteDetail() {
+  const { id = '' } = useParams();
+  const nav = useNavigate();
+  const canWrite = useCanWrite();
+  const { workshop } = useAuth();
+  const [wa, setWa] = useState(false);
+  const { data, loading, error } = useLoad(async () => {
+    const q = must(await supabase.from('quotes').select('*').eq('id', id).single()) as Quote;
+    const [c, o] = await Promise.all([
+      supabase.from('clients').select('*').eq('id', q.client_id).single(),
+      supabase.from('orders').select('id, number, step').eq('quote_id', id).limit(1)
+    ]);
+    return { q, c: must(c) as Client, o: (must(o) as Pick<Order, 'id' | 'number' | 'step'>[])[0] };
+  }, [id]);
+  if (error) return <div className="flex flex-col gap-4"><TopBar icon={FileText} tone="violet" title="Devis" back="/commandes" /><Notice>Impossible d'ouvrir ce devis. Vérifiez votre connexion puis réessayez.</Notice></div>;
+  if (loading || !data) return <Loading />;
+  const { q, c, o } = data;
+  const toOrder = () => nav(`/commandes/nouvelle?client=${c.id}&devis=${q.id}&modele=${encodeURIComponent(q.title)}&prix=${q.total}&avance=${q.deposit}`);
+  return (
+    <div className="flex max-w-2xl flex-col gap-5">
+      <TopBar icon={FileText} tone="violet" title={q.number} back="/commandes" right={quotePill(q.status)} />
+      <div className="rounded-2xl bg-gradient-to-br from-[#7C3AED] to-[#6D28D9] p-5 text-white shadow-[0_16px_30px_-20px_rgba(124,58,237,0.9)]">
+        <button onClick={() => nav(`/clients/${c.id}`)} className="text-xs font-bold uppercase tracking-wider text-white/80 hover:text-white">{c.full_name} ›</button>
+        <div className="mt-1 text-2xl font-extrabold">{q.title}</div>
+        <div className="mt-3 text-3xl font-extrabold tabular-nums">{money(q.total)}</div>
+        <div className="mt-1 text-sm text-white/85">Envoyé le {dateFr(q.created_at, { day: 'numeric', month: 'long' })}{q.responded_at ? ` · réponse le ${dateFr(q.responded_at, { day: 'numeric', month: 'long' })}` : ''}</div>
+      </div>
+      <Card>
+        <h2 className="mb-2 font-bold">Détail</h2>
+        {q.lines.map((l, i) => <KV key={i} k={l.label} v={money(l.amount)} />)}
+        <KV strong k="Total" v={money(q.total)} />
+        <KV k="Avance demandée" v={money(q.deposit)} />
+        <KV k="Délai" v={q.delay || '—'} />
+      </Card>
+      {o ? (
+        <Card onClick={() => nav(`/commandes/${o.id}`)}>
+          <div className="flex items-center justify-between gap-3"><div><div className="text-sm text-muted">Commande liée</div><div className="font-bold">{o.number}</div></div>{stepPill(o.step)}</div>
+        </Card>
+      ) : q.status === 'refused' ? <Notice>Le client a refusé ce devis.</Notice> : (
+        <div className="flex flex-col gap-2">
+          {c.phone && <Button variant="whatsapp" onClick={() => setWa(true)}><MessageCircle className="h-4 w-4" />Renvoyer sur WhatsApp</Button>}
+          {canWrite && <Button variant="soft" onClick={toOrder}><Plus className="h-4 w-4" />Le client a accepté : créer la commande</Button>}
+          {!c.user_id && <div className="text-xs text-muted">Ce client n'a pas d'espace en ligne : s'il confirme par WhatsApp, créez la commande vous-même.</div>}
+        </div>
+      )}
+      <WhatsAppSheet open={wa} onClose={() => setWa(false)} to={c.full_name} phone={c.phone} text={quoteText(q, c, workshop?.name)} />
+    </div>
+  );
+}
+
 export function QuoteNew() {
   const nav = useNavigate();
   const toast = useToast();
@@ -213,6 +269,7 @@ export function QuoteNew() {
   const [delay, setDelay] = useState('14 jours');
   const [busy, setBusy] = useState(false);
   const [sent, setSent] = useState<{ text: string; c: Client } | null>(null);
+  const [savedId, setSavedId] = useState<string | null>(null);
   const total = useMemo(() => lines.reduce((s, l) => s + (parseInt(l.amount.replace(/\D/g, ''), 10) || 0), 0), [lines]);
 
   if (loading) return <Loading />;
@@ -228,8 +285,9 @@ export function QuoteNew() {
     setBusy(false);
     if (error) return toast(errMsg(error), 'err');
     const c = clients.find((x) => x.id === client)!;
-    const text = `Bonjour ${c.full_name.split(' ')[0]}, voici votre devis ${data.number} – ${title} :\n${clean.map((l) => `• ${l.label} : ${money(l.amount)}`).join('\n')}\nTotal : ${money(data.total)}\nAvance : ${money(dep)} · Délai : ${delay}\n${c.user_id ? `\nAcceptez ou refusez-le dans votre espace : ${appUrl()}/espace/devis/${data.id}` : '\nRépondez à ce message pour confirmer.'}\n${workshop?.name}`;
-    if (c.phone) setSent({ text, c }); else { toast(`Devis ${data.number} enregistré`); nav('/commandes'); }
+    const text = quoteText(data as Quote, c, workshop?.name);
+    setSavedId(data.id);
+    if (c.phone) setSent({ text, c }); else { toast(`Devis ${data.number} enregistré`); nav(`/devis/${data.id}`, { replace: true }); }
   };
 
   return (
@@ -257,7 +315,7 @@ export function QuoteNew() {
       </div>
       {client && !clients.find((c) => c.id === client)?.user_id && <Notice>Ce client n'a pas encore activé son espace : il recevra le détail du devis sur WhatsApp. Invitez-le depuis sa fiche pour qu'il puisse accepter en ligne.</Notice>}
       <Button type="submit" loading={busy}><MessageCircle className="h-4 w-4" />Enregistrer et envoyer par WhatsApp</Button>
-      <WhatsAppSheet open={!!sent} onClose={() => { setSent(null); nav('/commandes'); }} to={sent?.c.full_name ?? ''} phone={sent?.c.phone ?? ''} text={sent?.text ?? ''} />
+      <WhatsAppSheet open={!!sent} onClose={() => { setSent(null); nav(savedId ? `/devis/${savedId}` : '/commandes', { replace: true }); }} to={sent?.c.full_name ?? ''} phone={sent?.c.phone ?? ''} text={sent?.text ?? ''} />
     </form>
   );
 }

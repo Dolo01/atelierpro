@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useState, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes, type TextareaHTMLAttributes } from 'react';
+import { createContext, useCallback, useContext, useEffect, useState, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes, type TextareaHTMLAttributes } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Loader2, X, MessageCircle, Info, AlertTriangle, CheckCircle2, ChevronRight, type LucideIcon } from 'lucide-react';
 import { TONES, avatarTone, type Tone } from '../lib/tones';
@@ -113,7 +113,15 @@ export function Empty({ children, icon, tone = 'slate' }: { children: ReactNode;
 }
 
 export function Loading() {
-  return <div className="flex justify-center py-16 text-brand-600"><Loader2 className="h-7 w-7 animate-spin" /></div>;
+  // Si le chargement traîne (réseau coupé, erreur), on propose de réessayer au lieu d'un sablier sans fin.
+  const [slow, setSlow] = useState(false);
+  useEffect(() => { const t = setTimeout(() => setSlow(true), 12000); return () => clearTimeout(t); }, []);
+  return (
+    <div className="flex flex-col items-center gap-3 py-16 text-brand-600">
+      <Loader2 className="h-7 w-7 animate-spin" />
+      {slow && <div className="text-center text-sm text-muted">La connexion semble lente.<br /><button className="mt-2 font-bold text-brand-700" onClick={() => window.location.reload()}>Réessayer</button></div>}
+    </div>
+  );
 }
 
 export function Stat({ label, value, sub, tone, icon, iconTone = 'blue' }: { label: string; value: ReactNode; sub?: ReactNode; tone?: 'blue'; icon?: LucideIcon; iconTone?: Tone }) {
