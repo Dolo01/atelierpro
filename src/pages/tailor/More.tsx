@@ -9,6 +9,8 @@ import { Avatar, Button, Card, IconTile, Chips, Empty, Field, Input, KV, List, L
 import { TONES } from '../../lib/tones';
 import { ChangePassword } from '../auth/AuthPages';
 import { useCanWrite } from './Clients';
+import { ReceiptSheet, subscriptionReceipt } from '../../components/ReceiptSheet';
+import { NotifSettings } from '../../components/PushPrompt';
 
 // ---------------- Agenda ----------------
 export function Agenda() {
@@ -83,6 +85,7 @@ export function More() {
         <Avatar name={profile?.full_name || 'A'} />
         <div className="min-w-0"><div className="truncate font-bold">{profile?.full_name}</div><div className="truncate text-sm text-white/85">{workshop?.name} · {owner ? 'Propriétaire' : 'Employé'}</div></div>
       </div>
+      <NotifSettings />
       <List>
         {items.filter((i) => i[4]).map(([to, I, l, d], idx) => <Row key={to} onClick={() => nav(to)} left={<IconTile icon={I} tone={(['gold', 'pink', 'amber', 'slate'] as const)[idx % 4]} />} title={l} subtitle={d} />)}
         <Row onClick={signOut} left={<IconTile icon={LogOut} tone="orange" />} title="Se déconnecter" />
@@ -102,9 +105,10 @@ export function Subscription() {
   const [ref, setRef] = useState('');
   const [file, setFile] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
+  const [receiptId, setReceiptId] = useState<string | null>(null);
   const { data, loading, reload } = useLoad(async () => {
     const [p, s, r] = await Promise.all([
-      supabase.from('plans').select('*').eq('is_active', true).order('sort_order'),
+      supabase.from('plans').select('*').order('sort_order'),
       supabase.from('platform_settings').select('*').single(),
       supabase.from('payment_requests').select('*').order('created_at', { ascending: false })
     ]);
@@ -135,12 +139,16 @@ export function Subscription() {
     } catch (x) { toast(errMsg(x), 'err'); } finally { setBusy(false); }
   };
 
+  const rr = data.reqs.find((x) => x.id === receiptId);
   const history = data.reqs.length > 0 && (
     <Section title="Historique des paiements">
       <List>{data.reqs.map((r) => (
-        <Row key={r.id} title={`${planName(r.plan_id)} · ${r.months} mois`} subtitle={`${dateFr(r.created_at)} · ${METHODS[r.method].label} · réf. ${r.reference}${r.reject_reason ? ' · ' + r.reject_reason : ''}`}
+        <Row key={r.id} onClick={r.status === 'validated' ? () => setReceiptId(r.id) : undefined} title={`${planName(r.plan_id)} · ${r.months} mois`} subtitle={`${dateFr(r.created_at)} · ${METHODS[r.method].label} · réf. ${r.reference}${r.reject_reason ? ' · ' + r.reject_reason : ''}`}
           right={<div className="text-right"><div className="text-sm font-semibold tabular-nums">{money(r.amount)}</div>{r.status === 'validated' ? <Pill tone="ok">Validé</Pill> : r.status === 'rejected' ? <Pill tone="danger">Rejeté</Pill> : <Pill tone="warn">En vérification</Pill>}</div>} />
       ))}</List>
+      {data.reqs.some((r) => r.status === 'validated') && <div className="mt-1 text-xs text-muted">Touchez un paiement validé pour voir et télécharger son reçu.</div>}
+      <ReceiptSheet data={rr ? subscriptionReceipt(workshop, data.plans.find((p) => p.id === rr.plan_id) ?? null, rr, data.settings) : null} onClose={() => setReceiptId(null)}
+        filename={`Recu-${rr?.receipt_no ?? 'abonnement'}`} shareText={rr ? `Reçu d'abonnement AtelierPro ${rr.receipt_no ?? ''} · ${money(rr.amount)}` : ''} />
     </Section>
   );
 

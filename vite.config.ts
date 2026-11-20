@@ -25,7 +25,10 @@ export default defineConfig({
       },
       workbox: {
         navigateFallback: '/index.html',
-        globPatterns: ['**/*.{js,css,html,svg,png,jpg,woff2}']
+        importScripts: ['push-sw.js'],
+        globPatterns: ['**/*.{js,css,html,svg,png,jpg,woff2}'],
+        // Le module PDF (~700 Ko) n'est téléchargé que si l'on demande un PDF : pas au démarrage.
+        globIgnores: ['**/jspdf*', '**/html2canvas*', '**/purify*', '**/index.es-*']
       }
     })
   ]

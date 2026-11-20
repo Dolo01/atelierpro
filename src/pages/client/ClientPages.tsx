@@ -9,6 +9,8 @@ import { Button, Card, IconTile, Empty, KV, List, Loading, Notice, Pill, Row, Se
 import { quotePill, Timeline } from '../tailor/Orders';
 import { stepPill } from '../tailor/Home';
 import { ChangePassword } from '../auth/AuthPages';
+import { orderReceipt, ReceiptSheet } from '../../components/ReceiptSheet';
+import { NotifSettings } from '../../components/PushPrompt';
 
 /** Toutes les données visibles par le client connecté (la base filtre déjà). */
 function useMine() {
@@ -182,14 +184,23 @@ export function ClientMeasures() {
 export function ClientPayments() {
   const { signOut } = useAuth();
   const { data, loading } = useMine();
+  const [rid, setRid] = useState<string | null>(null);
   if (loading || !data) return <Loading />;
+  const rp = data.pays.find((x) => x.id === rid);
+  const ro = rp && data.orders.find((o) => o.id === rp.order_id);
+  const rc = ro && data.clients.find((c) => c.id === ro.client_id);
+  const rw = ro && data.workshops.find((w) => w.id === ro.workshop_id);
   const due = data.orders.reduce((s, o) => s + Math.max(0, o.price - paidOf(data.pays, o.id)), 0);
   const num = (id: string) => data.orders.find((o) => o.id === id)?.number ?? '';
   return (
     <div className="flex flex-col gap-5">
       <TopBar icon={Wallet} tone="green" title="Paiements" />
       <div className="flex items-center gap-4 rounded-2xl bg-gradient-to-br from-brand-600 to-brand-500 p-4 text-white"><IconTile icon={Wallet} tone="gold" solid size={48} /><div><div className="text-[11px] font-bold uppercase tracking-wider text-brand-100">Reste à payer</div><div className="text-2xl font-extrabold tabular-nums">{money(due)}</div></div></div>
-      {data.pays.length ? <List>{data.pays.map((p) => <Row key={p.id} title={`${p.note || 'Paiement'} · ${num(p.order_id)}`} subtitle={`${dateFr(p.paid_at)} · ${p.method}`} right={<span className="font-semibold tabular-nums">{money(p.amount)}</span>} />)}</List> : <Empty icon={Wallet} tone="green">Aucun paiement enregistré.</Empty>}
+      {data.pays.length ? <List>{data.pays.map((p) => <Row key={p.id} onClick={() => setRid(p.id)} title={`${p.note || 'Paiement'} · ${num(p.order_id)}`} subtitle={`${dateFr(p.paid_at)} · ${p.method} · reçu ${p.receipt_no ?? ''}`} right={<span className="font-semibold tabular-nums">{money(p.amount)}</span>} />)}</List> : <Empty icon={Wallet} tone="green">Aucun paiement enregistré.</Empty>}
+      {data.pays.length > 0 && <div className="-mt-2 text-xs text-muted">Touchez un paiement pour voir et télécharger son reçu.</div>}
+      <ReceiptSheet data={rp && ro && rc && rw ? orderReceipt(rw, rc, ro, data.pays.filter((x) => x.order_id === ro.id), rp) : null} onClose={() => setRid(null)}
+        filename={`Recu-${rp?.receipt_no ?? 'paiement'}`} shareText={rp ? `Reçu ${rp.receipt_no ?? ''} · ${money(rp.amount)}` : ''} />
+      <Section title="Notifications"><NotifSettings /></Section>
       <Section title="Mon compte"><ChangePassword /><Button variant="ghost" className="max-w-md" onClick={signOut}>Se déconnecter</Button></Section>
     </div>
   );

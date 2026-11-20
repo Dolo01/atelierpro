@@ -17,11 +17,12 @@ export interface Order {
   id: string; workshop_id: string; client_id: string; quote_id: string | null; number: string; title: string; fabric: string;
   price: number; step: number; due_date: string | null; created_at: string; updated_at: string;
 }
-export interface OrderPayment { id: string; order_id: string; workshop_id: string; amount: number; method: string; note: string; paid_at: string }
+export interface OrderPayment { id: string; order_id: string; workshop_id: string; amount: number; method: string; note: string; paid_at: string; receipt_no: string | null }
 export interface Appointment { id: string; workshop_id: string; client_id: string | null; starts_at: string; purpose: string }
 export interface PaymentRequest {
   id: string; workshop_id: string; plan_id: string; months: number; amount: number; method: 'orange_money' | 'wave' | 'moov_money';
   reference: string; proof_path: string; status: 'pending' | 'validated' | 'rejected'; reject_reason: string | null; created_at: string; reviewed_at: string | null;
+  receipt_no: string | null; period_start: string | null; period_end: string | null;
 }
 export interface Notification { id: string; title: string; link: string | null; read_at: string | null; created_at: string }
 export interface Settings {

@@ -5,6 +5,7 @@ import { must, useLoad } from '../lib/auth';
 import { dateTimeFr } from '../lib/format';
 import type { Notification } from '../lib/types';
 import { Button, Empty, List, Loading, Row, TopBar } from '../components/ui';
+import { NotifSettings } from '../components/PushPrompt';
 
 export default function Notifications() {
   const nav = useNavigate();
@@ -23,6 +24,7 @@ export default function Notifications() {
   return (
     <div className="flex flex-col gap-4">
       <TopBar icon={Bell} tone="orange" title="Notifications" back right={data?.some((n) => !n.read_at) ? <Button size="sm" variant="ghost" onClick={markAll}>Tout marquer lu</Button> : undefined} />
+      <NotifSettings />
       {loading ? <Loading /> : !data?.length ? <Empty icon={Bell} tone="orange">Aucune notification pour le moment.</Empty> : (
         <List>
           {data.map((n) => (

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { Check, Ruler, Shirt, Sparkles, PackageCheck, Handshake, type LucideIcon, MessageCircle, Plus, Trash2, Pencil, Undo2, FileText, Scissors, ShoppingBag } from 'lucide-react';
+import { Check, Ruler, Shirt, Sparkles, PackageCheck, Handshake, type LucideIcon, MessageCircle, Plus, Trash2, Pencil, Undo2, ReceiptText, FileText, Scissors, ShoppingBag } from 'lucide-react';
 import { supabase, errMsg } from '../../lib/supabase';
 import { must, useAuth, useLoad } from '../../lib/auth';
 import { appUrl, dateFr, money, STEPS } from '../../lib/format';
@@ -8,6 +8,7 @@ import { TONES, STEP_TONES } from '../../lib/tones';
 import { paidOf, type Client, type Order, type OrderPayment, type Quote } from '../../lib/types';
 import { Avatar, Button, Card, Chips, Empty, Field, Input, KV, List, Loading, Notice, Pill, Row, Section, Select, Sheet, Steps, TopBar, WhatsAppSheet, useToast } from '../../components/ui';
 import { stepPill } from './Home';
+import { orderReceipt, ReceiptSheet } from '../../components/ReceiptSheet';
 import { useCanWrite } from './Clients';
 
 export function quotePill(s: Quote['status']) {
@@ -99,6 +100,7 @@ export function OrderDetail() {
   const [editOpen, setEditOpen] = useState(false);
   const [edit, setEdit] = useState({ title: '', fabric: '', price: '', due: '' });
   const [del, setDel] = useState<null | { kind: 'order' } | { kind: 'pay'; id: string; amount: number }>(null);
+  const [receiptId, setReceiptId] = useState<string | null>(null);
   const [wa, setWa] = useState<string | null>(null);
   const [amount, setAmount] = useState('');
   const [method, setMethod] = useState('Espèces');
@@ -157,10 +159,11 @@ export function OrderDetail() {
     const a = parseInt(amount.replace(/\D/g, ''), 10);
     if (!a || a <= 0) return toast('Montant invalide', 'err');
     setBusy(true);
-    const { error } = await supabase.from('order_payments').insert({ workshop_id: workshop!.id, order_id: o.id, amount: a, method, note: paid + a >= o.price ? 'Solde' : paid === 0 ? 'Avance' : 'Acompte' });
+    const { data: np, error } = await supabase.from('order_payments').insert({ workshop_id: workshop!.id, order_id: o.id, amount: a, method, note: paid + a >= o.price ? 'Solde' : paid === 0 ? 'Avance' : 'Acompte' }).select('id').single();
     setBusy(false);
     if (error) return toast(errMsg(error), 'err');
-    setPayOpen(false); toast(`${money(a)} enregistrés`); reload();
+    setPayOpen(false); toast(`${money(a)} enregistrés`); await reload();
+    if (np) setReceiptId(np.id); // le reçu s'ouvre directement, prêt à être envoyé
   };
   const message = () => o.step === 4
     ? `Bonjour ${first}, votre ${o.title.toLowerCase()} (${o.number}) est prêt ! Vous pouvez passer le récupérer à l'atelier.${rest > 0 ? `\nReste à régler : ${money(rest)}.` : ''}\n${workshop?.name}`
@@ -191,7 +194,7 @@ export function OrderDetail() {
           <div className="mb-2 flex items-center justify-between"><h2 className="font-bold">Paiements</h2>{rest > 0 ? <Pill tone="warn">Reste {money(rest)}</Pill> : <Pill tone="ok">Soldé</Pill>}</div>
           <KV k="Prix convenu" v={money(o.price)} />
           {p.map((x) => <KV key={x.id} k={<>{x.note || 'Paiement'} <span className="text-xs">· {dateFr(x.paid_at, { day: 'numeric', month: 'short' })} · {x.method}</span></>}
-            v={<span className="inline-flex items-center gap-1.5">{money(x.amount)}{isOwner && canWrite && <button type="button" aria-label="Supprimer ce paiement" onClick={() => setDel({ kind: 'pay', id: x.id, amount: x.amount })} className="grid h-7 w-7 place-items-center rounded-lg text-slate-400 hover:bg-red-50 hover:text-red-600"><Trash2 className="h-3.5 w-3.5" /></button>}</span>} />)}
+            v={<span className="inline-flex items-center gap-1.5">{money(x.amount)}<button type="button" aria-label={`Reçu ${x.receipt_no ?? ''}`} title="Reçu" onClick={() => setReceiptId(x.id)} className="grid h-7 w-7 place-items-center rounded-lg text-brand-600 hover:bg-brand-50"><ReceiptText className="h-4 w-4" /></button>{isOwner && canWrite && <button type="button" aria-label="Supprimer ce paiement" onClick={() => setDel({ kind: 'pay', id: x.id, amount: x.amount })} className="grid h-7 w-7 place-items-center rounded-lg text-slate-400 hover:bg-red-50 hover:text-red-600"><Trash2 className="h-3.5 w-3.5" /></button>}</span>} />)}
           <KV strong k="Total payé" v={money(paid)} />
           {rest > 0 && canWrite && <Button variant="soft" className="mt-3 w-full" onClick={() => { setAmount(String(rest)); setPayOpen(true); }}><Plus className="h-4 w-4" />Enregistrer un paiement</Button>}
         </Card>
@@ -220,6 +223,13 @@ export function OrderDetail() {
         </form>
       </Sheet>
       <WhatsAppSheet open={!!wa} onClose={() => setWa(null)} to={c.full_name} phone={c.phone} text={wa ?? ''} />
+      {(() => {
+        const rp = p.find((x) => x.id === receiptId);
+        const after = rp ? Math.max(0, o.price - p.filter((x) => new Date(x.paid_at) <= new Date(rp.paid_at)).reduce((s2, x) => s2 + x.amount, 0)) : 0;
+        return <ReceiptSheet data={rp && workshop ? orderReceipt(workshop, c, o, p, rp) : null} onClose={() => setReceiptId(null)}
+          filename={`Recu-${rp?.receipt_no ?? 'paiement'}-${o.number}`} phone={c.phone || ''}
+          shareText={rp ? `Bonjour ${first}, voici votre reçu ${rp.receipt_no ?? ''} : ${money(rp.amount)} reçus pour la commande ${o.number} (${o.title}).${after > 0 ? ` Reste à payer : ${money(after)}.` : ' Commande soldée, merci !'}\n${workshop?.name ?? ''}` : ''} />;
+      })()}
     </div>
   );
 }

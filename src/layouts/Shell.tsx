@@ -5,6 +5,8 @@ import { supabase } from '../lib/supabase';
 import { useAuth } from '../lib/auth';
 import { initials } from '../lib/format';
 import { TONES, type Tone } from '../lib/tones';
+import { syncPush } from '../lib/push';
+import { PushBanner } from '../components/PushPrompt';
 
 export interface NavItem { to: string; label: string; icon: LucideIcon; tone: Tone; end?: boolean }
 
@@ -25,6 +27,10 @@ export function Shell({ items, notifPath, subtitle, banner }: { items: NavItem[]
   const { profile, session } = useAuth();
   const nav = useNavigate();
   const [unread, setUnread] = useState(0);
+
+  // Ce téléphone a déjà autorisé les notifications : on le rattache au compte connecté
+  const uid = session?.user.id;
+  useEffect(() => { if (uid) syncPush(); }, [uid]);
 
   useEffect(() => {
     if (!session) return;
@@ -69,6 +75,7 @@ export function Shell({ items, notifPath, subtitle, banner }: { items: NavItem[]
             {unread > 0 && <span className="absolute -right-1 -top-1 grid h-5 min-w-5 place-items-center rounded-full border-2 border-white px-1 text-[11px] font-extrabold text-white" style={{ background: TONES.orange.fg }}>{unread > 9 ? '9+' : unread}</span>}
           </button>
         </header>
+        <PushBanner />
         {banner}
         <main className="mx-auto w-full max-w-5xl flex-1 px-4 pb-32 pt-4 md:px-8 md:pb-10 md:pt-6">
           <Outlet />

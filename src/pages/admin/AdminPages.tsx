@@ -7,6 +7,8 @@ import { dateFr, dateTimeFr, daysLeft, METHODS, money } from '../../lib/format';
 import { accessOf, type Access, type AdminLog, type PaymentRequest, type Plan, type Profile, type Settings, type Workshop } from '../../lib/types';
 import { Avatar, Button, Card, IconTile, Chips, Empty, Field, Input, KV, List, Loading, Notice, Pill, Row, Section, Select, Sheet, Stat, Textarea, TopBar, useToast } from '../../components/ui';
 import { ChangePassword } from '../auth/AuthPages';
+import { ReceiptSheet, subscriptionReceipt } from '../../components/ReceiptSheet';
+import { NotifSettings } from '../../components/PushPrompt';
 
 export function accessPill(a: Access) {
   return { active: <Pill tone="ok">Actif</Pill>, trial: <Pill tone="warn">Essai</Pill>, expired: <Pill>Expiré</Pill>, suspended: <Pill tone="danger">Suspendu</Pill> }[a];
@@ -100,6 +102,7 @@ export function AdminPayment() {
   const [reason, setReason] = useState('');
   const [busy, setBusy] = useState(false);
   const [proofUrl, setProofUrl] = useState<string | null>(null);
+  const [showReceipt, setShowReceipt] = useState(false);
   const { data, loading, reload } = useLoad(async () => {
     const r = must(await supabase.from('payment_requests').select('*').eq('id', id).single()) as PaymentRequest;
     const [w, p, s] = await Promise.all([
@@ -160,7 +163,11 @@ export function AdminPayment() {
             <div className="flex gap-2 md:max-w-lg"><Button variant="danger" className="flex-1" onClick={() => setRej(true)}>Rejeter</Button><Button className="flex-1" loading={busy} onClick={() => review(true)}><ShieldCheck className="h-4 w-4" />Valider et activer</Button></div>
           )}
         </>
-      ) : <Notice tone={r.status === 'validated' ? 'ok' : 'danger'}>{r.status === 'validated' ? 'Validé : l\'abonnement a été activé automatiquement.' : `Rejeté : ${r.reject_reason}. L'atelier a été notifié.`}</Notice>}
+      ) : <Notice tone={r.status === 'validated' ? 'ok' : 'danger'}>{r.status === 'validated' ? `Validé : l'abonnement a été activé automatiquement${r.receipt_no ? ` et le reçu ${r.receipt_no} a été mis à disposition de l'atelier` : ''}.` : `Rejeté : ${r.reject_reason}. L'atelier a été notifié.`}</Notice>}
+      {r.status === 'validated' && <Button variant="soft" className="self-start" onClick={() => setShowReceipt(true)}><Receipt className="h-4 w-4" />Voir le reçu {r.receipt_no}</Button>}
+      <ReceiptSheet data={showReceipt ? subscriptionReceipt(w, p, r, s) : null} onClose={() => setShowReceipt(false)}
+        filename={`Recu-${r.receipt_no ?? 'abonnement'}-${w.name.replace(/\s+/g, '-')}`} phone={data.owner?.phone || w.phone || ''}
+        shareText={`Bonjour, voici le reçu ${r.receipt_no ?? ''} de votre abonnement AtelierPro : forfait ${p.name}, ${r.months} mois, ${money(r.amount)}. Merci !`} />
     </div>
   );
 }
@@ -336,6 +343,7 @@ export function AdminSettings() {
       <List>
         <Row onClick={() => nav('/admin/journal')} title="Journal des opérations" subtitle="Validations, suspensions, forfaits, réglages" right={<span className="text-muted">›</span>} />
       </List>
+      <div className="flex max-w-xl flex-col gap-3"><h2 className="font-bold">Notifications</h2><NotifSettings /></div>
       <div className="flex max-w-xl flex-col gap-3"><h2 className="font-bold">Mon mot de passe</h2><ChangePassword /><Button variant="ghost" onClick={signOut}>Se déconnecter</Button></div>
     </div>
   );

@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState, ty
 import type { Session } from '@supabase/supabase-js';
 import { supabase } from './supabase';
 import type { Profile, Workshop } from './types';
+import { forgetDevicePush } from './push';
 
 interface AuthState {
   session: Session | null;
@@ -63,6 +64,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Déconnexion immédiate : on efface la session sur l'appareil sans attendre le serveur
   // (sur une connexion mobile lente, l'appel réseau pouvait bloquer longtemps).
   const signOut = useCallback(async () => {
+    try {
+      // ce téléphone ne doit plus recevoir les alertes de ce compte (au plus 0,8 s d'attente)
+      await Promise.race([forgetDevicePush(), new Promise((r) => setTimeout(r, 800))]);
+    } catch { /* ignoré */ }
     setSession(null); setProfile(null); setWorkshop(null);
     try {
       await Promise.race([supabase.auth.signOut({ scope: 'local' }), new Promise((r) => setTimeout(r, 1500))]);
