@@ -123,6 +123,7 @@ export default function App() {
         <Route path="/commandes/:id" element={<OrderDetail />} />
         <Route path="/devis/nouveau" element={<QuoteNew />} />
         <Route path="/devis/:id" element={<QuoteDetail />} />
+        <Route path="/devis/:id/modifier" element={<QuoteNew />} />
         <Route path="/agenda" element={<Agenda />} />
         <Route path="/plus" element={<More />} />
         <Route path="/plus/abonnement" element={<Subscription />} />

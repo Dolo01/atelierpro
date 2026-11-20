@@ -1,6 +1,6 @@
-import { useMemo, useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { Check, Ruler, Shirt, Sparkles, PackageCheck, Handshake, type LucideIcon, MessageCircle, Plus, Trash2, FileText, Scissors, ShoppingBag } from 'lucide-react';
+import { Check, Ruler, Shirt, Sparkles, PackageCheck, Handshake, type LucideIcon, MessageCircle, Plus, Trash2, Pencil, Undo2, FileText, Scissors, ShoppingBag } from 'lucide-react';
 import { supabase, errMsg } from '../../lib/supabase';
 import { must, useAuth, useLoad } from '../../lib/auth';
 import { appUrl, dateFr, money, STEPS } from '../../lib/format';
@@ -12,6 +12,21 @@ import { useCanWrite } from './Clients';
 
 export function quotePill(s: Quote['status']) {
   return s === 'accepted' ? <Pill tone="ok">Accepté</Pill> : s === 'refused' ? <Pill tone="danger">Refusé</Pill> : s === 'draft' ? <Pill>Brouillon</Pill> : <Pill tone="warn">En attente</Pill>;
+}
+
+/** Fenêtre de confirmation avant une suppression. */
+function ConfirmSheet({ open, onClose, title, text, onConfirm, busy }: { open: boolean; onClose: () => void; title: string; text: string; onConfirm: () => void; busy?: boolean }) {
+  return (
+    <Sheet open={open} onClose={onClose} title={title}>
+      <div className="flex flex-col gap-4">
+        <p className="text-sm text-muted">{text}</p>
+        <div className="grid grid-cols-2 gap-2">
+          <Button type="button" variant="ghost" onClick={onClose}>Annuler</Button>
+          <Button type="button" variant="danger" loading={busy} onClick={onConfirm}><Trash2 className="h-4 w-4" />Supprimer</Button>
+        </div>
+      </div>
+    </Sheet>
+  );
 }
 
 const STEP_ICONS: LucideIcon[] = [Ruler, Scissors, Shirt, Sparkles, PackageCheck, Handshake];
@@ -76,9 +91,14 @@ export function OrderDetail() {
   const { id = '' } = useParams();
   const toast = useToast();
   const canWrite = useCanWrite();
-  const { workshop } = useAuth();
+  const { workshop, profile } = useAuth();
+  const nav = useNavigate();
+  const isOwner = profile?.role === 'tailor_owner';
   const [busy, setBusy] = useState(false);
   const [payOpen, setPayOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
+  const [edit, setEdit] = useState({ title: '', fabric: '', price: '', due: '' });
+  const [del, setDel] = useState<null | { kind: 'order' } | { kind: 'pay'; id: string; amount: number }>(null);
   const [wa, setWa] = useState<string | null>(null);
   const [amount, setAmount] = useState('');
   const [method, setMethod] = useState('Espèces');
@@ -102,6 +122,36 @@ export function OrderDetail() {
     if (error) return toast(errMsg(error), 'err');
     toast(`Étape « ${STEPS[o.step + 1]} » enregistrée${c.user_id ? ', client notifié' : ''}`); reload();
   };
+  const back = async () => {
+    setBusy(true);
+    const { error } = await supabase.from('orders').update({ step: o.step - 1 }).eq('id', o.id);
+    setBusy(false);
+    if (error) return toast(errMsg(error), 'err');
+    toast(`Retour à l'étape « ${STEPS[o.step - 1]} »`); reload();
+  };
+  const openEdit = () => { setEdit({ title: o.title, fabric: o.fabric || '', price: String(o.price), due: o.due_date || '' }); setEditOpen(true); };
+  const saveEdit = async (e: FormEvent) => {
+    e.preventDefault();
+    const price = parseInt(edit.price.replace(/\D/g, ''), 10) || 0;
+    if (!edit.title.trim()) return toast('Le modèle est obligatoire', 'err');
+    setBusy(true);
+    const { error } = await supabase.from('orders').update({ title: edit.title.trim(), fabric: edit.fabric.trim(), price, due_date: edit.due || null }).eq('id', o.id);
+    setBusy(false);
+    if (error) return toast(errMsg(error), 'err');
+    setEditOpen(false); toast('Commande modifiée'); reload();
+  };
+  const confirmDelete = async () => {
+    if (!del) return;
+    setBusy(true);
+    const r = del.kind === 'order'
+      ? await supabase.from('orders').delete().eq('id', o.id).select('id')
+      : await supabase.from('order_payments').delete().eq('id', del.id).select('id');
+    setBusy(false);
+    if (r.error) return toast(errMsg(r.error), 'err');
+    if (!r.data?.length) return toast("Suppression refusée : seul le propriétaire de l'atelier peut supprimer.", 'err');
+    if (del.kind === 'order') { toast(`Commande ${o.number} supprimée`); nav('/commandes', { replace: true }); return; }
+    setDel(null); toast('Paiement supprimé'); reload();
+  };
   const savePay = async (e: FormEvent) => {
     e.preventDefault();
     const a = parseInt(amount.replace(/\D/g, ''), 10);
@@ -118,7 +168,8 @@ export function OrderDetail() {
 
   return (
     <div className="flex flex-col gap-5">
-      <TopBar icon={Scissors} tone="violet" title={o.number} back="/commandes" />
+      <TopBar icon={Scissors} tone="violet" title={o.number} back="/commandes"
+        right={canWrite ? <Button size="sm" variant="ghost" onClick={openEdit}><Pencil className="h-4 w-4" />Modifier</Button> : undefined} />
       <div className="rounded-2xl bg-gradient-to-br from-brand-600 to-brand-500 p-5 text-white shadow-[0_16px_30px_-20px_rgba(29,78,216,0.9)]">
         <div className="text-xs font-bold uppercase tracking-wider text-white/80">{c.full_name}</div>
         <div className="mt-1 text-2xl font-extrabold">{o.title}</div>
@@ -132,17 +183,34 @@ export function OrderDetail() {
           <Timeline step={o.step} />
           <div className="mt-4 flex flex-col gap-2">
             {o.step < 5 && canWrite && <Button onClick={next} loading={busy}>Passer à « {STEPS[o.step + 1]} »</Button>}
+            {o.step > 0 && canWrite && <button type="button" onClick={back} disabled={busy} className="inline-flex items-center justify-center gap-1.5 py-1 text-sm font-semibold text-muted hover:text-ink"><Undo2 className="h-4 w-4" />Revenir à « {STEPS[o.step - 1]} »</button>}
             {c.phone && <Button variant="whatsapp" onClick={() => setWa(message())}><MessageCircle className="h-4 w-4" />Informer {first} sur WhatsApp</Button>}
           </div>
         </Card>
         <Card>
           <div className="mb-2 flex items-center justify-between"><h2 className="font-bold">Paiements</h2>{rest > 0 ? <Pill tone="warn">Reste {money(rest)}</Pill> : <Pill tone="ok">Soldé</Pill>}</div>
           <KV k="Prix convenu" v={money(o.price)} />
-          {p.map((x) => <KV key={x.id} k={<>{x.note || 'Paiement'} <span className="text-xs">· {dateFr(x.paid_at, { day: 'numeric', month: 'short' })} · {x.method}</span></>} v={money(x.amount)} />)}
+          {p.map((x) => <KV key={x.id} k={<>{x.note || 'Paiement'} <span className="text-xs">· {dateFr(x.paid_at, { day: 'numeric', month: 'short' })} · {x.method}</span></>}
+            v={<span className="inline-flex items-center gap-1.5">{money(x.amount)}{isOwner && canWrite && <button type="button" aria-label="Supprimer ce paiement" onClick={() => setDel({ kind: 'pay', id: x.id, amount: x.amount })} className="grid h-7 w-7 place-items-center rounded-lg text-slate-400 hover:bg-red-50 hover:text-red-600"><Trash2 className="h-3.5 w-3.5" /></button>}</span>} />)}
           <KV strong k="Total payé" v={money(paid)} />
           {rest > 0 && canWrite && <Button variant="soft" className="mt-3 w-full" onClick={() => { setAmount(String(rest)); setPayOpen(true); }}><Plus className="h-4 w-4" />Enregistrer un paiement</Button>}
         </Card>
       </div>
+      {isOwner && canWrite && <Button variant="danger" className="self-start" onClick={() => setDel({ kind: 'order' })}><Trash2 className="h-4 w-4" />Supprimer la commande</Button>}
+      <Sheet open={editOpen} onClose={() => setEditOpen(false)} title={`Modifier ${o.number}`}>
+        <form onSubmit={saveEdit} className="flex flex-col gap-4">
+          <Field label="Modèle"><Input value={edit.title} onChange={(e) => setEdit({ ...edit, title: e.target.value })} required /></Field>
+          <Field label="Tissu"><Input value={edit.fabric} onChange={(e) => setEdit({ ...edit, fabric: e.target.value })} /></Field>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Prix (FCFA)"><Input inputMode="numeric" value={edit.price} onChange={(e) => setEdit({ ...edit, price: e.target.value })} required /></Field>
+            <Field label="Livraison"><Input type="date" value={edit.due} onChange={(e) => setEdit({ ...edit, due: e.target.value })} /></Field>
+          </div>
+          <Button type="submit" loading={busy}>Enregistrer</Button>
+        </form>
+      </Sheet>
+      <ConfirmSheet open={!!del} onClose={() => setDel(null)} busy={busy} onConfirm={confirmDelete}
+        title={del?.kind === 'order' ? `Supprimer ${o.number} ?` : 'Supprimer ce paiement ?'}
+        text={del?.kind === 'order' ? `La commande « ${o.title} » et ses ${p.length} paiement(s) seront définitivement effacés. Cette action est irréversible.` : del?.kind === 'pay' ? `Le paiement de ${money(del.amount)} sera effacé et le reste à payer recalculé. Cette action est irréversible.` : ''} />
       <Sheet open={payOpen} onClose={() => setPayOpen(false)} title="Enregistrer un paiement">
         <form onSubmit={savePay} className="flex flex-col gap-4">
           <div className="text-sm text-muted">{o.number} · reste {money(rest)}</div>
@@ -211,7 +279,10 @@ export function QuoteDetail() {
   const nav = useNavigate();
   const canWrite = useCanWrite();
   const { workshop } = useAuth();
+  const toast = useToast();
   const [wa, setWa] = useState(false);
+  const [delOpen, setDelOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
   const { data, loading, error } = useLoad(async () => {
     const q = must(await supabase.from('quotes').select('*').eq('id', id).single()) as Quote;
     const [c, o] = await Promise.all([
@@ -223,12 +294,25 @@ export function QuoteDetail() {
   if (error) return <div className="flex flex-col gap-4"><TopBar icon={FileText} tone="violet" title="Devis" back="/commandes" /><Notice>Impossible d'ouvrir ce devis. Vérifiez votre connexion puis réessayez.</Notice></div>;
   if (loading || !data) return <Loading />;
   const { q, c, o } = data;
+  const remove = async () => {
+    setBusy(true);
+    const r = await supabase.from('quotes').delete().eq('id', q.id).select('id');
+    setBusy(false);
+    if (r.error) return toast(errMsg(r.error), 'err');
+    if (!r.data?.length) return toast('Ce devis ne peut plus être supprimé.', 'err');
+    toast(`Devis ${q.number} supprimé`); nav('/commandes', { replace: true });
+  };
+  const editable = canWrite && (q.status === 'sent' || q.status === 'draft');
   const toOrder = () => nav(`/commandes/nouvelle?client=${c.id}&devis=${q.id}&modele=${encodeURIComponent(q.title)}&prix=${q.total}&avance=${q.deposit}`);
   return (
     <div className="flex max-w-2xl flex-col gap-5">
-      <TopBar icon={FileText} tone="violet" title={q.number} back="/commandes" right={quotePill(q.status)} />
+      <TopBar icon={FileText} tone="violet" title={q.number} back="/commandes"
+        right={editable ? <Button size="sm" variant="ghost" onClick={() => nav(`/devis/${q.id}/modifier`)}><Pencil className="h-4 w-4" />Modifier</Button> : undefined} />
       <div className="rounded-2xl bg-gradient-to-br from-[#7C3AED] to-[#6D28D9] p-5 text-white shadow-[0_16px_30px_-20px_rgba(124,58,237,0.9)]">
-        <button onClick={() => nav(`/clients/${c.id}`)} className="text-xs font-bold uppercase tracking-wider text-white/80 hover:text-white">{c.full_name} ›</button>
+        <div className="flex items-start justify-between gap-3">
+          <button onClick={() => nav(`/clients/${c.id}`)} className="text-left text-xs font-bold uppercase tracking-wider text-white/80 hover:text-white">{c.full_name} ›</button>
+          <span className="shrink-0 rounded-full bg-white px-0.5 py-0.5">{quotePill(q.status)}</span>
+        </div>
         <div className="mt-1 text-2xl font-extrabold">{q.title}</div>
         <div className="mt-3 text-3xl font-extrabold tabular-nums">{money(q.total)}</div>
         <div className="mt-1 text-sm text-white/85">Envoyé le {dateFr(q.created_at, { day: 'numeric', month: 'long' })}{q.responded_at ? ` · réponse le ${dateFr(q.responded_at, { day: 'numeric', month: 'long' })}` : ''}</div>
@@ -251,6 +335,9 @@ export function QuoteDetail() {
           {!c.user_id && <div className="text-xs text-muted">Ce client n'a pas d'espace en ligne : s'il confirme par WhatsApp, créez la commande vous-même.</div>}
         </div>
       )}
+      {canWrite && q.status !== 'accepted' && <Button variant="danger" className="self-start" onClick={() => setDelOpen(true)}><Trash2 className="h-4 w-4" />Supprimer le devis</Button>}
+      <ConfirmSheet open={delOpen} onClose={() => setDelOpen(false)} busy={busy} onConfirm={remove} title={`Supprimer ${q.number} ?`}
+        text={`Le devis « ${q.title} » (${money(q.total)}) sera définitivement effacé${c.user_id ? ' et disparaîtra de l\'espace du client' : ''}. Cette action est irréversible.`} />
       <WhatsAppSheet open={wa} onClose={() => setWa(false)} to={c.full_name} phone={c.phone} text={quoteText(q, c, workshop?.name)} />
     </div>
   );
@@ -261,6 +348,8 @@ export function QuoteNew() {
   const toast = useToast();
   const { workshop } = useAuth();
   const [sp] = useSearchParams();
+  const { id: editId } = useParams();
+  const existing = useLoad(async () => (editId ? (must(await supabase.from('quotes').select('*').eq('id', editId).single()) as Quote) : null), [editId]);
   const { data: clients, loading } = useClients();
   const [client, setClient] = useState(sp.get('client') ?? '');
   const [title, setTitle] = useState('');
@@ -270,9 +359,16 @@ export function QuoteNew() {
   const [busy, setBusy] = useState(false);
   const [sent, setSent] = useState<{ text: string; c: Client } | null>(null);
   const [savedId, setSavedId] = useState<string | null>(null);
+  useEffect(() => {
+    const q = existing.data;
+    if (!q) return;
+    setClient(q.client_id); setTitle(q.title); setDelay(q.delay); setDeposit(String(q.deposit));
+    setLines(q.lines.map((l) => ({ label: l.label, amount: String(l.amount) })));
+  }, [existing.data]);
   const total = useMemo(() => lines.reduce((s, l) => s + (parseInt(l.amount.replace(/\D/g, ''), 10) || 0), 0), [lines]);
 
-  if (loading) return <Loading />;
+  if (loading || existing.loading) return <Loading />;
+  if (editId && existing.data && !['sent', 'draft'].includes(existing.data.status)) return <div className="flex flex-col gap-4"><TopBar icon={FileText} tone="violet" title="Modifier le devis" back /><Notice>Ce devis a déjà reçu une réponse du client : il ne peut plus être modifié.</Notice></div>;
   if (!clients?.length) return <div className="flex flex-col gap-4"><TopBar icon={FileText} tone="violet" title="Nouveau devis" back /><Empty>Ajoutez d'abord un client. <button className="font-semibold text-brand-700" onClick={() => nav('/clients/nouveau')}>Nouveau client</button></Empty></div>;
 
   const submit = async (e: FormEvent) => {
@@ -281,6 +377,13 @@ export function QuoteNew() {
     if (!clean.length || total <= 0) return toast('Ajoutez au moins une ligne avec un montant.', 'err');
     setBusy(true);
     const dep = deposit ? parseInt(deposit.replace(/\D/g, ''), 10) || 0 : Math.round(total / 2);
+    if (editId) {
+      const { error } = await supabase.from('quotes').update({ title, lines: clean, deposit: dep, delay }).eq('id', editId);
+      setBusy(false);
+      if (error) return toast(errMsg(error), 'err');
+      toast('Devis modifié. Pensez à le renvoyer au client.'); nav(`/devis/${editId}`, { replace: true });
+      return;
+    }
     const { data, error } = await supabase.from('quotes').insert({ workshop_id: workshop!.id, client_id: client, title, lines: clean, deposit: dep, delay, status: 'sent' }).select().single();
     setBusy(false);
     if (error) return toast(errMsg(error), 'err');
@@ -292,8 +395,8 @@ export function QuoteNew() {
 
   return (
     <form onSubmit={submit} className="flex max-w-2xl flex-col gap-4">
-      <TopBar icon={FileText} tone="violet" title="Nouveau devis" back />
-      <Field label="Client"><Select value={client} onChange={(e) => setClient(e.target.value)} required><option value="">Choisir un client</option>{clients.map((c) => <option key={c.id} value={c.id}>{c.full_name}{c.user_id ? '' : ' (sans espace)'}</option>)}</Select></Field>
+      <TopBar icon={FileText} tone="violet" title={editId ? `Modifier ${existing.data?.number ?? 'le devis'}` : 'Nouveau devis'} back />
+      <Field label="Client"><Select value={client} onChange={(e) => setClient(e.target.value)} required disabled={!!editId}><option value="">Choisir un client</option>{clients.map((c) => <option key={c.id} value={c.id}>{c.full_name}{c.user_id ? '' : ' (sans espace)'}</option>)}</Select></Field>
       <Field label="Modèle"><Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Ex. Robe de soirée bazin" required /></Field>
       <Card>
         <h2 className="mb-3 font-bold">Lignes du devis</h2>
@@ -313,8 +416,9 @@ export function QuoteNew() {
         <Field label="Avance demandée (FCFA)" hint="Par défaut : 50 % du total"><Input inputMode="numeric" value={deposit} onChange={(e) => setDeposit(e.target.value)} placeholder={String(Math.round(total / 2))} /></Field>
         <Field label="Délai"><Input value={delay} onChange={(e) => setDelay(e.target.value)} /></Field>
       </div>
-      {client && !clients.find((c) => c.id === client)?.user_id && <Notice>Ce client n'a pas encore activé son espace : il recevra le détail du devis sur WhatsApp. Invitez-le depuis sa fiche pour qu'il puisse accepter en ligne.</Notice>}
-      <Button type="submit" loading={busy}><MessageCircle className="h-4 w-4" />Enregistrer et envoyer par WhatsApp</Button>
+      {!editId && client && !clients.find((c) => c.id === client)?.user_id && <Notice>Ce client n'a pas encore activé son espace : il recevra le détail du devis sur WhatsApp. Invitez-le depuis sa fiche pour qu'il puisse accepter en ligne.</Notice>}
+      {editId ? <Button type="submit" loading={busy}>Enregistrer les modifications</Button>
+        : <Button type="submit" loading={busy}><MessageCircle className="h-4 w-4" />Enregistrer et envoyer par WhatsApp</Button>}
       <WhatsAppSheet open={!!sent} onClose={() => { setSent(null); nav(savedId ? `/devis/${savedId}` : '/commandes', { replace: true }); }} to={sent?.c.full_name ?? ''} phone={sent?.c.phone ?? ''} text={sent?.text ?? ''} />
     </form>
   );
