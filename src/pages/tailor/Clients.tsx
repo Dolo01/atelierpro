@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { UserPlus, Ruler, FileText, Plus, Send } from 'lucide-react';
+import { UserPlus, Ruler, FileText, Plus, Send, Users, ShoppingBag } from 'lucide-react';
 import { supabase, errMsg } from '../../lib/supabase';
 import { must, useAuth, useLoad } from '../../lib/auth';
 import { appUrl, dateFr, displayPhone, MEASURES, money } from '../../lib/format';
@@ -21,9 +21,9 @@ export function ClientsList() {
   const list = (data ?? []).filter((c) => (c.full_name + c.phone).toLowerCase().includes(q.toLowerCase()));
   return (
     <div className="flex flex-col gap-4">
-      <TopBar title="Clients" right={<Button size="sm" onClick={() => nav('/clients/nouveau')}><UserPlus className="h-4 w-4" />Nouveau</Button>} />
+      <TopBar icon={Users} tone="green" title="Clients" right={<Button size="sm" onClick={() => nav('/clients/nouveau')}><UserPlus className="h-4 w-4" />Nouveau</Button>} />
       <Input placeholder="Rechercher par nom ou téléphone" value={q} onChange={(e) => setQ(e.target.value)} />
-      {loading ? <Loading /> : !list.length ? <Empty>{data?.length ? 'Aucun client trouvé.' : 'Ajoutez votre premier client.'}</Empty> : (
+      {loading ? <Loading /> : !list.length ? <Empty icon={Users} tone="green">{data?.length ? 'Aucun client trouvé.' : 'Ajoutez votre premier client.'}</Empty> : (
         <List>{list.map((c, i) => (
           <Row key={c.id} onClick={() => nav(`/clients/${c.id}`)} left={<Avatar name={c.full_name} tone={i} />} title={c.full_name} subtitle={c.phone || 'Pas de numéro'}
             right={c.user_id ? <Pill tone="ok">Espace actif</Pill> : <Pill>Sans espace</Pill>} />
@@ -49,7 +49,7 @@ export function ClientNew() {
   };
   return (
     <form onSubmit={submit} className="flex max-w-xl flex-col gap-4">
-      <TopBar title="Nouveau client" back />
+      <TopBar icon={UserPlus} tone="green" title="Nouveau client" back />
       <Field label="Nom complet"><Input value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} required /></Field>
       <Field label="Numéro WhatsApp"><Input value={f.phone} onChange={(e) => setF({ ...f, phone: e.target.value })} inputMode="tel" placeholder="+223 ..." /></Field>
       <Field label="Notes (préférences, tissus...)"><Textarea rows={3} value={f.notes} onChange={(e) => setF({ ...f, notes: e.target.value })} /></Field>
@@ -98,10 +98,10 @@ export function ClientDetail() {
         </div>
         {c.notes && <p className="mt-3 text-sm text-muted">{c.notes}</p>}
         <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
-          <Button size="sm" variant="ghost" onClick={() => nav(`/devis/nouveau?client=${c.id}`)} disabled={!canWrite}><FileText className="h-4 w-4" />Devis</Button>
-          <Button size="sm" variant="ghost" onClick={() => nav(`/commandes/nouvelle?client=${c.id}`)} disabled={!canWrite}><Plus className="h-4 w-4" />Commande</Button>
-          <Button size="sm" variant="ghost" onClick={() => nav(`/clients/${c.id}/mesures`)}><Ruler className="h-4 w-4" />Mesures</Button>
-          {!c.user_id && <Button size="sm" variant="soft" onClick={invite} loading={inviting} disabled={!canWrite || !c.phone}><Send className="h-4 w-4" />Inviter</Button>}
+          <Button size="sm" variant="ghost" className="!border-transparent !bg-[#EDE9FE] !text-[#5B21B6]" onClick={() => nav(`/devis/nouveau?client=${c.id}`)} disabled={!canWrite}><FileText className="h-4 w-4" />Devis</Button>
+          <Button size="sm" variant="ghost" className="!border-transparent !bg-[#DBEAFE] !text-[#1E40AF]" onClick={() => nav(`/commandes/nouvelle?client=${c.id}`)} disabled={!canWrite}><Plus className="h-4 w-4" />Commande</Button>
+          <Button size="sm" variant="ghost" className="!border-transparent !bg-[#CCFBF1] !text-[#115E59]" onClick={() => nav(`/clients/${c.id}/mesures`)}><Ruler className="h-4 w-4" />Mesures</Button>
+          {!c.user_id && <Button size="sm" variant="whatsapp" onClick={invite} loading={inviting} disabled={!canWrite || !c.phone}><Send className="h-4 w-4" />Inviter</Button>}
         </div>
         {!c.user_id && !c.phone && <p className="mt-2 text-xs text-muted">Ajoutez un numéro WhatsApp pour pouvoir inviter ce client.</p>}
       </Card>
@@ -111,7 +111,7 @@ export function ClientDetail() {
           <>
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
               {MEASURES.filter(([k]) => m.values[k] != null).slice(0, 8).map(([k, l]) => (
-                <div key={k} className="rounded-xl border border-line bg-white p-3"><div className="text-xs text-muted">{l}</div><div className="text-lg font-extrabold tabular-nums">{m.values[k]} <span className="text-xs font-medium text-muted">cm</span></div></div>
+                <div key={k} className="rounded-xl border border-[#CCFBF1] bg-[#F0FDFA] p-3"><div className="text-xs text-muted">{l}</div><div className="text-lg font-extrabold tabular-nums">{m.values[k]} <span className="text-xs font-medium text-muted">cm</span></div></div>
               ))}
             </div>
             <button className="self-start text-sm font-semibold text-brand-700" onClick={() => nav(`/clients/${c.id}/mesures`)}>Toutes les mesures et l'historique ›</button>
@@ -121,10 +121,10 @@ export function ClientDetail() {
 
       <div className="grid gap-5 md:grid-cols-2">
         <Section title="Commandes">
-          {data.o.length ? <List>{data.o.map((o) => <Row key={o.id} onClick={() => nav(`/commandes/${o.id}`)} title={o.title} subtitle={`${o.number} · ${money(o.price)}`} right={stepPill(o.step)} />)}</List> : <Empty>Aucune commande.</Empty>}
+          {data.o.length ? <List>{data.o.map((o) => <Row key={o.id} onClick={() => nav(`/commandes/${o.id}`)} title={o.title} subtitle={`${o.number} · ${money(o.price)}`} right={stepPill(o.step)} />)}</List> : <Empty icon={ShoppingBag} tone="indigo">Aucune commande.</Empty>}
         </Section>
         <Section title="Devis">
-          {data.q.length ? <List>{data.q.map((q) => <Row key={q.id} title={q.title} subtitle={`${q.number} · ${money(q.total)}`} right={quotePill(q.status)} />)}</List> : <Empty>Aucun devis.</Empty>}
+          {data.q.length ? <List>{data.q.map((q) => <Row key={q.id} title={q.title} subtitle={`${q.number} · ${money(q.total)}`} right={quotePill(q.status)} />)}</List> : <Empty icon={FileText} tone="violet">Aucun devis.</Empty>}
         </Section>
       </div>
       <WhatsAppSheet open={!!wa} onClose={() => setWa(null)} to={c.full_name} phone={c.phone} text={wa ?? ''} />
@@ -169,11 +169,11 @@ export function ClientMeasures() {
     setEdit(false); reload();
   };
 
-  if (!cur && !canWrite) return <div className="flex flex-col gap-4"><TopBar title={`Mesures · ${data.c.full_name}`} back /><Empty>Aucune mesure enregistrée.</Empty></div>;
+  if (!cur && !canWrite) return <div className="flex flex-col gap-4"><TopBar icon={Ruler} tone="teal" title={`Mesures · ${data.c.full_name}`} back /><Empty>Aucune mesure enregistrée.</Empty></div>;
   if (edit || !cur) {
     return (
       <form onSubmit={save} className="flex max-w-2xl flex-col gap-4">
-        <TopBar title={`Mesures · ${data.c.full_name}`} back />
+        <TopBar icon={Ruler} tone="teal" title={`Mesures · ${data.c.full_name}`} back />
         <Notice>Valeurs en centimètres. Laissez vide ce qui ne s'applique pas.</Notice>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
           {MEASURES.map(([k, l]) => <Field key={k} label={l}><Input inputMode="decimal" value={vals[k] ?? ''} onChange={(e) => setVals({ ...vals, [k]: e.target.value })} /></Field>)}
@@ -185,13 +185,13 @@ export function ClientMeasures() {
 
   return (
     <div className="flex flex-col gap-4">
-      <TopBar title={`Mesures · ${data.c.full_name}`} back right={canWrite ? <Button size="sm" variant="ghost" onClick={startEdit}>Nouvelle prise</Button> : undefined} />
+      <TopBar icon={Ruler} tone="teal" title={`Mesures · ${data.c.full_name}`} back right={canWrite ? <Button size="sm" variant="ghost" onClick={startEdit}>Nouvelle prise</Button> : undefined} />
       <div className="text-sm text-muted">Fiche du {dateFr(cur.taken_at)}{prev ? ` · comparée au ${dateFr(prev.taken_at)}` : ''}</div>
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
         {MEASURES.filter(([k]) => cur.values[k] != null).map(([k, l]) => {
           const d = prev?.values[k] != null ? Math.round((cur.values[k] - prev.values[k]) * 10) / 10 : 0;
           return (
-            <div key={k} className="rounded-xl border border-line bg-white p-3">
+            <div key={k} className="rounded-xl border border-[#CCFBF1] bg-[#F0FDFA] p-3">
               <div className="text-xs text-muted">{l}</div>
               <div className="text-lg font-extrabold tabular-nums">{cur.values[k]} <span className="text-xs font-medium text-muted">cm</span></div>
               {d !== 0 && <div className={`text-xs font-bold ${d > 0 ? 'text-amber-700' : 'text-brand-700'}`}>{d > 0 ? '+' : ''}{d} cm</div>}

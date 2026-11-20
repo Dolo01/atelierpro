@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useState, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes, type TextareaHTMLAttributes } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Loader2, X, MessageCircle, Info, AlertTriangle, CheckCircle2, type LucideIcon } from 'lucide-react';
+import { ArrowLeft, Loader2, X, MessageCircle, Info, AlertTriangle, CheckCircle2, ChevronRight, type LucideIcon } from 'lucide-react';
 import { TONES, avatarTone, type Tone } from '../lib/tones';
 import { initials } from '../lib/format';
 
@@ -59,13 +59,14 @@ export function IconTile({ icon: I, tone, size = 40, solid }: { icon: LucideIcon
   );
 }
 
-export function TopBar({ title, back, right, sub }: { title: string; back?: boolean | string; right?: ReactNode; sub?: string }) {
+export function TopBar({ title, back, right, sub, icon, tone = 'blue' }: { title: string; back?: boolean | string; right?: ReactNode; sub?: string; icon?: LucideIcon; tone?: Tone }) {
   const nav = useNavigate();
   return (
     <div className="flex items-center gap-3 py-1">
-      {back && <button type="button" aria-label="Retour" onClick={() => (typeof back === 'string' ? nav(back) : nav(-1))} className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-line bg-white hover:bg-canvas"><ArrowLeft className="h-5 w-5" /></button>}
+      {back && <button type="button" aria-label="Retour" onClick={() => (typeof back === 'string' ? nav(back) : nav(-1))} className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl border border-line bg-white hover:bg-canvas"><ArrowLeft className="h-5 w-5" /></button>}
+      {icon && <IconTile icon={icon} tone={tone} size={44} />}
       <div className="min-w-0 flex-1">
-        {sub && <div className="text-xs text-muted">{sub}</div>}
+        {sub && <div className="text-xs font-semibold text-muted">{sub}</div>}
         <h1 className="truncate text-xl font-extrabold tracking-tight md:text-2xl">{title}</h1>
       </div>
       {right}
@@ -87,6 +88,7 @@ export function Row({ left, title, subtitle, right, onClick }: { left?: ReactNod
       {left}
       <span className="min-w-0 flex-1"><span className="block truncate font-semibold">{title}</span>{subtitle && <span className="block truncate text-xs text-muted">{subtitle}</span>}</span>
       {right}
+      {onClick && !right && <ChevronRight className="h-4 w-4 shrink-0 text-slate-400" />}
     </C>
   );
 }
@@ -101,8 +103,13 @@ export function Notice({ tone = 'info', children }: { tone?: 'info' | 'warn' | '
   return <div className={cx('flex gap-2.5 rounded-xl p-3 text-sm', t)}><I className="mt-0.5 h-4 w-4 shrink-0" /><div>{children}</div></div>;
 }
 
-export function Empty({ children }: { children: ReactNode }) {
-  return <div className="rounded-2xl border border-dashed border-line bg-white px-4 py-8 text-center text-sm text-muted">{children}</div>;
+export function Empty({ children, icon, tone = 'slate' }: { children: ReactNode; icon?: LucideIcon; tone?: Tone }) {
+  return (
+    <div className="flex flex-col items-center gap-3 rounded-2xl border border-dashed border-line bg-white px-4 py-8 text-center text-sm text-muted">
+      {icon && <IconTile icon={icon} tone={tone} size={48} />}
+      <div>{children}</div>
+    </div>
+  );
 }
 
 export function Loading() {
@@ -127,7 +134,7 @@ export function Chips<T extends string>({ value, onChange, options }: { value: T
     <div className="flex flex-wrap gap-2">
       {options.map(([k, l]) => (
         <button key={k} type="button" onClick={() => onChange(k)} aria-pressed={value === k}
-          className={cx('rounded-full border px-3.5 py-1.5 text-sm font-semibold', value === k ? 'border-brand-600 bg-brand-600 text-white' : 'border-line bg-white text-ink hover:bg-canvas')}>{l}</button>
+          className={cx('rounded-full border px-3.5 py-1.5 text-sm font-semibold', value === k ? 'border-brand-600 bg-brand-600 text-white shadow-[0_6px_12px_-8px_rgba(29,78,216,0.9)]' : 'border-line bg-white text-slate-700 hover:bg-canvas')}>{l}</button>
       ))}
     </div>
   );
@@ -151,7 +158,7 @@ export function Sheet({ open, onClose, title, children }: { open: boolean; onClo
 
 /** Aperçu du message + ouverture de WhatsApp (wa.me). */
 export function WhatsAppSheet({ open, onClose, to, phone, text }: { open: boolean; onClose: () => void; to: string; phone: string; text: string }) {
-  const url = `https://wa.me/${phone.replace(/\D/g, '')}?text=${encodeURIComponent(text)}`;
+  const url = `https://wa.me/${(phone || '').replace(/\D/g, '')}?text=${encodeURIComponent(text)}`;
   return (
     <Sheet open={open} onClose={onClose} title="Message WhatsApp">
       <div className="text-sm text-muted">À {to} · {phone}</div>

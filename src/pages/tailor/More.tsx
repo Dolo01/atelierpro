@@ -1,11 +1,12 @@
 import { useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { BarChart3, CreditCard, Home as HomeIcon, KeyRound, LogOut, Paperclip, Plus, Trash2, Users } from 'lucide-react';
+import { BarChart3, CreditCard, Home as HomeIcon, KeyRound, LogOut, Paperclip, Plus, Trash2, Users, CalendarDays, LayoutGrid, Star, ShieldCheck, Gift, AlertTriangle, User, Crown, Check, Wallet, TrendingUp, Clock, PackageCheck, CheckCheck } from 'lucide-react';
 import { supabase, errMsg } from '../../lib/supabase';
 import { must, useAuth, useLoad } from '../../lib/auth';
 import { appUrl, dateFr, daysLeft, METHODS, money, type MethodKey } from '../../lib/format';
 import { accessOf, paidOf, type Appointment, type Client, type Order, type OrderPayment, type PaymentRequest, type Plan, type Profile, type Settings } from '../../lib/types';
 import { Avatar, Button, Card, IconTile, Chips, Empty, Field, Input, KV, List, Loading, Notice, Pill, Row, Section, Select, Sheet, Stat, TopBar, WhatsAppSheet, useToast } from '../../components/ui';
+import { TONES } from '../../lib/tones';
 import { ChangePassword } from '../auth/AuthPages';
 import { useCanWrite } from './Clients';
 
@@ -39,12 +40,12 @@ export function Agenda() {
   const del = async (id: string) => { await supabase.from('appointments').delete().eq('id', id); reload(); };
   return (
     <div className="flex flex-col gap-4">
-      <TopBar title="Agenda" right={canWrite ? <Button size="sm" onClick={() => setOpen(true)}><Plus className="h-4 w-4" />Rendez-vous</Button> : undefined} />
-      {!data.a.length && <Empty>Aucun rendez-vous à venir.</Empty>}
+      <TopBar icon={CalendarDays} tone="orange" title="Agenda" right={canWrite ? <Button size="sm" onClick={() => setOpen(true)}><Plus className="h-4 w-4" />Rendez-vous</Button> : undefined} />
+      {!data.a.length && <Empty icon={CalendarDays} tone="orange">Aucun rendez-vous à venir.</Empty>}
       {[...groups.entries()].map(([k, list]) => (
         <Section key={k} title={dateFr(k, { weekday: 'long', day: 'numeric', month: 'long' })}>
-          <List>{list.map((r) => (
-            <Row key={r.id} left={<span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-brand-50 text-xs font-bold text-brand-700">{new Date(r.starts_at).toTimeString().slice(0, 5)}</span>}
+          <List>{list.map((r, ri) => (
+            <Row key={r.id} left={<span className="grid h-11 w-14 shrink-0 place-items-center rounded-xl text-sm font-extrabold tabular-nums" style={{ background: TONES[(["orange", "teal", "pink", "indigo"] as const)[ri % 4]].bg, color: TONES[(["orange", "teal", "pink", "indigo"] as const)[ri % 4]].text }}>{new Date(r.starts_at).toTimeString().slice(0, 5)}</span>}
               title={name(r.client_id)} subtitle={r.purpose}
               right={canWrite ? <button aria-label="Supprimer" onClick={() => del(r.id)} className="grid h-9 w-9 place-items-center rounded-lg text-muted hover:bg-canvas"><Trash2 className="h-4 w-4" /></button> : undefined} />
           ))}</List>
@@ -77,13 +78,13 @@ export function More() {
   ];
   return (
     <div className="flex flex-col gap-4">
-      <TopBar title="Plus" />
-      <div className="flex items-center gap-3 rounded-2xl bg-brand-600 p-4 text-white">
+      <TopBar icon={LayoutGrid} tone="slate" title="Plus" />
+      <div className="flex items-center gap-3 rounded-2xl bg-gradient-to-br from-brand-600 to-brand-500 p-4 text-white shadow-[0_16px_30px_-20px_rgba(29,78,216,0.9)]">
         <Avatar name={profile?.full_name || 'A'} />
         <div className="min-w-0"><div className="truncate font-bold">{profile?.full_name}</div><div className="truncate text-sm text-white/85">{workshop?.name} · {owner ? 'Propriétaire' : 'Employé'}</div></div>
       </div>
       <List>
-        {items.filter((i) => i[4]).map(([to, I, l, d], idx) => <Row key={to} onClick={() => nav(to)} left={<IconTile icon={I} tone={(['gold', 'pink', 'amber', 'slate'] as const)[idx % 4]} />} title={l} subtitle={d} right={<span className="text-muted">›</span>} />)}
+        {items.filter((i) => i[4]).map(([to, I, l, d], idx) => <Row key={to} onClick={() => nav(to)} left={<IconTile icon={I} tone={(['gold', 'pink', 'amber', 'slate'] as const)[idx % 4]} />} title={l} subtitle={d} />)}
         <Row onClick={signOut} left={<IconTile icon={LogOut} tone="orange" />} title="Se déconnecter" />
       </List>
     </div>
@@ -144,7 +145,8 @@ export function Subscription() {
   );
 
   const status = (
-    <Card className={a === 'active' ? '!border-transparent !bg-brand-600 text-white' : ''}>
+    <Card className={a === 'active' ? '!border-transparent bg-gradient-to-br from-brand-600 to-brand-500 text-white' : a === 'trial' ? '!border-[#FDE68A] !bg-[#FFFBEB]' : '!border-amber-200 !bg-amber-50'}>
+      <div className="mb-2"><IconTile icon={a === 'active' ? ShieldCheck : a === 'trial' ? Gift : AlertTriangle} tone={a === 'active' ? 'blue' : a === 'trial' ? 'gold' : 'orange'} solid={a !== 'active'} /></div>
       <div className="text-[11px] font-bold uppercase tracking-wider opacity-80">{a === 'active' ? 'Forfait actif' : a === 'trial' ? 'Essai gratuit' : a === 'expired' ? 'Accès expiré' : 'Suspendu'}</div>
       <div className="text-2xl font-extrabold">{a === 'active' ? planName(workshop.plan_id) : a === 'trial' ? `${daysLeft(workshop.trial_ends_at)} jours restants` : 'Choisissez un forfait'}</div>
       <div className="text-sm opacity-85">{a === 'active' ? `Valable jusqu'au ${dateFr(workshop.subscription_ends_at)}` : a === 'trial' ? `Fin de l'essai le ${dateFr(workshop.trial_ends_at)}` : 'Vos données sont conservées.'}</div>
@@ -154,7 +156,7 @@ export function Subscription() {
   if (pending) {
     return (
       <div className="flex max-w-2xl flex-col gap-4">
-        <TopBar title="Abonnement" back />
+        <TopBar icon={Star} tone="gold" title="Abonnement" back />
         {status}
         <Card>
           <Pill tone="warn">En cours de vérification</Pill>
@@ -169,22 +171,26 @@ export function Subscription() {
 
   return (
     <div className="flex max-w-2xl flex-col gap-4">
-      <TopBar title="Abonnement" back />
+      <TopBar icon={Star} tone="gold" title="Abonnement" back />
       {status}
       {step === 1 && (
         <>
           <Section title={a === 'active' ? 'Prolonger ou changer de forfait' : 'Choisir un forfait'}>
             <Chips value={months} onChange={setMonths} options={[['1', '1 mois'], ['3', '3 mois'], ['6', '6 mois'], ['12', '12 mois']]} />
             <div className="grid gap-3 md:grid-cols-3">
-              {data.plans.map((p) => (
-                <button key={p.id} onClick={() => setPlan(p.id)} aria-pressed={plan === p.id}
-                  className={`flex flex-col gap-1 rounded-2xl border-2 bg-white p-4 text-left ${plan === p.id ? 'border-brand-600 ring-4 ring-brand-100' : 'border-line'}`}>
-                  <div className="font-bold">{p.name}</div>
-                  <div className="text-xl font-extrabold tabular-nums">{money(p.price_monthly * Number(months))}</div>
-                  <div className="text-xs text-muted">{money(p.price_monthly)} / mois</div>
-                  <ul className="mt-1 list-disc pl-4 text-xs text-muted">{p.perks.map((x) => <li key={x}>{x}</li>)}</ul>
+              {data.plans.map((p, pi) => {
+                const tone = (['blue', 'violet', 'gold'] as const)[pi % 3]; const t = TONES[tone]; const sel = plan === p.id;
+                return (
+                <button key={p.id} onClick={() => setPlan(p.id)} aria-pressed={sel}
+                  className="relative flex flex-col gap-2 rounded-2xl border-2 bg-white p-4 text-left transition"
+                  style={{ borderColor: sel ? t.fg : '#E2E8F0', boxShadow: sel ? `0 0 0 4px ${t.bg}` : undefined }}>
+                  {pi === 1 && <span className="absolute -top-2.5 right-3 rounded-full px-2.5 py-0.5 text-[11px] font-extrabold text-white" style={{ background: t.fg }}>Populaire</span>}
+                  <div className="flex items-center gap-2.5"><IconTile icon={[User, Users, Crown][pi % 3]} tone={tone} size={38} solid={sel} /><span className="font-extrabold">{p.name}</span></div>
+                  <div><span className="text-2xl font-extrabold tabular-nums">{money(p.price_monthly * Number(months))}</span></div>
+                  <div className="text-xs font-semibold text-muted">{money(p.price_monthly)} / mois</div>
+                  <ul className="mt-1 flex flex-col gap-1.5 text-xs text-slate-600">{p.perks.map((x) => <li key={x} className="flex items-start gap-1.5"><Check className="mt-0.5 h-3.5 w-3.5 shrink-0" style={{ color: t.fg }} strokeWidth={3} />{x}</li>)}</ul>
                 </button>
-              ))}
+              ); })}
             </div>
           </Section>
           <Button disabled={!plan} onClick={() => setStep(2)}>Continuer</Button>
@@ -197,9 +203,10 @@ export function Subscription() {
               const n = numberOf(k);
               return (
                 <button key={k} disabled={!n} onClick={() => setMethod(k)} aria-pressed={method === k}
-                  className={`flex items-center gap-3 rounded-2xl border-2 bg-white p-3 text-left disabled:opacity-40 ${method === k ? 'border-brand-600' : 'border-line'}`}>
+                  className={`flex items-center gap-3 rounded-2xl border-2 bg-white p-3 text-left transition disabled:opacity-40 ${method === k ? 'border-brand-600 shadow-[0_0_0_4px_#E3EBFC]' : 'border-line'}`}>
                   <span className="grid h-10 w-10 place-items-center rounded-xl text-xs font-extrabold" style={{ background: METHODS[k].bg, color: METHODS[k].fg }}>{METHODS[k].short}</span>
-                  <span><span className="block font-bold">{METHODS[k].label}</span><span className="text-xs text-muted">{n ? 'Dépôt direct sur le numéro AtelierPro' : 'Non disponible pour le moment'}</span></span>
+                  <span className="flex-1"><span className="block font-bold">{METHODS[k].label}</span><span className="text-xs text-muted">{n ? 'Dépôt direct sur le numéro AtelierPro' : 'Non disponible pour le moment'}</span></span>
+                  {method === k && <span className="grid h-7 w-7 place-items-center rounded-full bg-brand-600 text-white"><Check className="h-4 w-4" strokeWidth={3} /></span>}
                 </button>
               );
             })}
@@ -210,7 +217,8 @@ export function Subscription() {
       )}
       {step === 3 && method && (
         <form onSubmit={submit} className="flex flex-col gap-4">
-          <div className="flex flex-col items-center gap-1 rounded-2xl border-2 border-dashed border-brand-500 bg-white p-5 text-center">
+          <div className="flex flex-col items-center gap-1 rounded-2xl border-2 border-dashed border-brand-500 bg-gradient-to-b from-brand-50 to-white p-5 text-center">
+            <span className="mb-1 grid h-12 w-12 place-items-center rounded-2xl text-sm font-extrabold" style={{ background: METHODS[method].bg, color: METHODS[method].fg }}>{METHODS[method].short}</span>
             <span className="text-xs text-muted">Déposez exactement</span>
             <span className="text-2xl font-extrabold tabular-nums">{money(amount)}</span>
             <span className="text-xs text-muted">sur le numéro {METHODS[method].label}</span>
@@ -254,12 +262,12 @@ export function Reports() {
   const year = new Date().getFullYear();
   return (
     <div className="flex flex-col gap-5">
-      <TopBar title="Rapports financiers" back />
+      <TopBar icon={BarChart3} tone="pink" title="Rapports financiers" back />
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-        <Stat tone="blue" label="Encaissé ce mois" value={money(months[5].v)} />
-        <Stat label={`Encaissé ${year}`} value={money(data.p.filter((x) => new Date(x.paid_at).getFullYear() === year).reduce((s, x) => s + x.amount, 0))} />
-        <Stat label="Soldes dus" value={money(owed.reduce((s, x) => s + x.rest, 0))} />
-        <Stat label="Commandes livrées" value={data.o.filter((o) => o.step === 5).length} />
+        <Stat icon={Wallet} iconTone="violet" label="Encaissé ce mois" value={money(months[5].v)} />
+        <Stat icon={TrendingUp} iconTone="green" label={`Encaissé ${year}`} value={money(data.p.filter((x) => new Date(x.paid_at).getFullYear() === year).reduce((s, x) => s + x.amount, 0))} />
+        <Stat icon={Clock} iconTone="orange" label="Soldes dus" value={money(owed.reduce((s, x) => s + x.rest, 0))} />
+        <Stat icon={PackageCheck} iconTone="blue" label="Commandes livrées" value={data.o.filter((o) => o.step === 5).length} />
       </div>
       <Card>
         <h2 className="font-bold">Encaissements des 6 derniers mois</h2>
@@ -267,14 +275,14 @@ export function Reports() {
           {months.map((m, i) => (
             <div key={m.k} className="flex h-full flex-1 flex-col items-center justify-end gap-1.5">
               <span className="text-[10px] font-semibold text-muted tabular-nums">{m.v ? Math.round(m.v / 1000) + 'k' : ''}</span>
-              <div className={`w-full rounded-t-lg ${i === 5 ? 'bg-brand-600' : 'bg-brand-200'}`} style={{ height: `${Math.max(3, (m.v / max) * 100)}%` }} title={money(m.v)} />
+              <div className={`w-full rounded-t-lg rounded-b-[4px] ${i === 5 ? 'bg-gradient-to-t from-brand-600 to-brand-500' : 'bg-brand-100'}`} style={{ height: `${Math.max(3, (m.v / max) * 100)}%` }} title={money(m.v)} />
               <span className="text-xs font-semibold capitalize text-muted">{m.label}</span>
             </div>
           ))}
         </div>
       </Card>
       <Section title="Clients avec un solde">
-        {owed.length ? <List>{owed.map(({ o, rest }) => <Row key={o.id} onClick={() => nav(`/commandes/${o.id}`)} title={name(o.client_id)} subtitle={`${o.number} · ${o.title}`} right={<span className="font-semibold tabular-nums text-amber-700">{money(rest)}</span>} />)}</List> : <Empty>Aucun solde en attente.</Empty>}
+        {owed.length ? <List>{owed.map(({ o, rest }) => <Row key={o.id} onClick={() => nav(`/commandes/${o.id}`)} left={<Avatar name={name(o.client_id)} />} title={name(o.client_id)} subtitle={`${o.number} · ${o.title}`} right={<span className="font-semibold tabular-nums text-amber-700">{money(rest)}</span>} />)}</List> : <Empty icon={CheckCheck} tone="green">Aucun solde en attente.</Empty>}
       </Section>
     </div>
   );
@@ -312,7 +320,7 @@ export function Staff() {
   };
   return (
     <div className="flex max-w-2xl flex-col gap-4">
-      <TopBar title="Employés" back />
+      <TopBar icon={Users} tone="amber" title="Employés" back />
       <Card>
         <div className="flex justify-between text-sm"><span className="text-muted">Places utilisées</span><span className="font-bold tabular-nums">{data.staff.length} / {limit}</span></div>
         <div className="mt-2 flex gap-1">{Array.from({ length: limit }).map((_, i) => <span key={i} className={`h-1.5 flex-1 rounded-full ${i < data.staff.length ? 'bg-brand-600' : 'bg-line'}`} />)}</div>
@@ -348,7 +356,7 @@ export function WorkshopProfile() {
   };
   return (
     <div className="flex flex-col gap-6">
-      <TopBar title="Profil et sécurité" back />
+      <TopBar icon={KeyRound} tone="slate" title="Profil et sécurité" back />
       {owner && (
         <form onSubmit={save} className="flex max-w-md flex-col gap-4">
           <h2 className="font-bold">Atelier</h2>

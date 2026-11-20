@@ -22,8 +22,8 @@ export default function Notifications() {
 
   return (
     <div className="flex flex-col gap-4">
-      <TopBar title="Notifications" back right={data?.some((n) => !n.read_at) ? <Button size="sm" variant="ghost" onClick={markAll}>Tout marquer lu</Button> : undefined} />
-      {loading ? <Loading /> : !data?.length ? <Empty>Aucune notification pour le moment.</Empty> : (
+      <TopBar icon={Bell} tone="orange" title="Notifications" back right={data?.some((n) => !n.read_at) ? <Button size="sm" variant="ghost" onClick={markAll}>Tout marquer lu</Button> : undefined} />
+      {loading ? <Loading /> : !data?.length ? <Empty icon={Bell} tone="orange">Aucune notification pour le moment.</Empty> : (
         <List>
           {data.map((n) => (
             <Row key={n.id} onClick={() => open(n)}

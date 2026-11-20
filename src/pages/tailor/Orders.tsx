@@ -1,9 +1,10 @@
 import { useMemo, useState, type FormEvent } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { Check, MessageCircle, Plus, Trash2 } from 'lucide-react';
+import { Check, Ruler, Shirt, Sparkles, PackageCheck, Handshake, type LucideIcon, MessageCircle, Plus, Trash2, FileText, Scissors, ShoppingBag } from 'lucide-react';
 import { supabase, errMsg } from '../../lib/supabase';
 import { must, useAuth, useLoad } from '../../lib/auth';
 import { appUrl, dateFr, money, STEPS } from '../../lib/format';
+import { TONES, STEP_TONES } from '../../lib/tones';
 import { paidOf, type Client, type Order, type OrderPayment, type Quote } from '../../lib/types';
 import { Avatar, Button, Card, Chips, Empty, Field, Input, KV, List, Loading, Notice, Pill, Row, Section, Select, Sheet, Steps, TopBar, WhatsAppSheet, useToast } from '../../components/ui';
 import { stepPill } from './Home';
@@ -13,18 +14,27 @@ export function quotePill(s: Quote['status']) {
   return s === 'accepted' ? <Pill tone="ok">Accepté</Pill> : s === 'refused' ? <Pill tone="danger">Refusé</Pill> : s === 'draft' ? <Pill>Brouillon</Pill> : <Pill tone="warn">En attente</Pill>;
 }
 
+const STEP_ICONS: LucideIcon[] = [Ruler, Scissors, Shirt, Sparkles, PackageCheck, Handshake];
+
+/** Suivi de fabrication : chaque étape a son icône et sa couleur. */
 export function Timeline({ step }: { step: number }) {
   return (
     <ol className="flex flex-col">
       {STEPS.map((s, i) => {
         const done = i < step || step === 5; const now = i === step && step < 5;
+        const t = TONES[STEP_TONES[i]]; const I = STEP_ICONS[i];
         return (
-          <li key={s} className="relative flex gap-3 pb-4 last:pb-0">
-            {i < STEPS.length - 1 && <span className="absolute left-[11px] top-6 bottom-0 w-0.5 bg-line" />}
-            <span className={`z-10 grid h-6 w-6 shrink-0 place-items-center rounded-full border-2 ${done ? 'border-brand-600 bg-brand-600 text-white' : now ? 'border-brand-600 bg-white' : 'border-line bg-white'}`}>
-              {done ? <Check className="h-3.5 w-3.5" strokeWidth={3} /> : now ? <span className="h-2 w-2 rounded-full bg-brand-600" /> : null}
+          <li key={s} className="relative flex items-center gap-3 pb-3 last:pb-0">
+            {i < STEPS.length - 1 && <span className="absolute left-[19px] top-10 bottom-0 w-0.5 rounded" style={{ background: done ? t.fg : '#E2E8F0' }} />}
+            <span className="z-10 grid h-10 w-10 shrink-0 place-items-center rounded-xl"
+              style={{ background: done ? t.fg : now ? t.bg : '#F1F5F9', color: done ? '#FFFFFF' : now ? t.fg : '#94A3B8', boxShadow: now ? `0 0 0 3px #FFFFFF, 0 0 0 5px ${t.fg}` : undefined }}>
+              {done ? <Check className="h-5 w-5" strokeWidth={3} /> : <I className="h-5 w-5" strokeWidth={2.1} />}
             </span>
-            <div><div className={now ? 'font-bold' : 'font-medium'}>{s}</div>{now && <div className="text-xs text-muted">Étape en cours</div>}</div>
+            <div className="flex min-w-0 flex-1 items-center justify-between gap-2">
+              <span className={now ? 'font-extrabold' : done ? 'font-semibold' : 'font-medium text-slate-500'}>{s}</span>
+              {now && <span className="rounded-full px-2.5 py-0.5 text-xs font-bold" style={{ background: t.bg, color: t.text }}>En cours</span>}
+              {done && <span className="text-xs font-semibold" style={{ color: t.text }}>Fait</span>}
+            </div>
           </li>
         );
       })}
@@ -49,14 +59,14 @@ export function OrdersList() {
   const list = data.o.filter((o) => (f === 'cours' ? o.step < 4 : f === 'pret' ? o.step === 4 : o.step === 5));
   return (
     <div className="flex flex-col gap-4">
-      <TopBar title="Commandes" right={canWrite ? <div className="flex gap-2"><Button size="sm" variant="ghost" onClick={() => nav('/devis/nouveau')}>Devis</Button><Button size="sm" onClick={() => nav('/commandes/nouvelle')}><Plus className="h-4 w-4" />Commande</Button></div> : undefined} />
+      <TopBar icon={ShoppingBag} tone="violet" title="Commandes" right={canWrite ? <div className="flex gap-2"><Button size="sm" variant="ghost" onClick={() => nav('/devis/nouveau')}>Devis</Button><Button size="sm" onClick={() => nav('/commandes/nouvelle')}><Plus className="h-4 w-4" />Commande</Button></div> : undefined} />
       <Chips value={f} onChange={setF} options={[['cours', 'En fabrication'], ['pret', 'Prêtes'], ['livre', 'Livrées']]} />
       {list.length ? <List>{list.map((o, i) => (
         <Row key={o.id} onClick={() => nav(`/commandes/${o.id}`)} left={<Avatar name={name(o.client_id)} tone={i} />} title={name(o.client_id)}
           subtitle={`${o.number} · ${o.title}${o.due_date ? ' · ' + dateFr(o.due_date, { day: 'numeric', month: 'short' }) : ''}`} right={stepPill(o.step)} />
-      ))}</List> : <Empty>Rien dans cette liste.</Empty>}
+      ))}</List> : <Empty icon={ShoppingBag} tone="violet">Rien dans cette liste.</Empty>}
       <Section title="Derniers devis">
-        {data.q.length ? <List>{data.q.map((q) => <Row key={q.id} title={name(q.client_id)} subtitle={`${q.number} · ${q.title} · ${money(q.total)}`} right={quotePill(q.status)} />)}</List> : <Empty>Aucun devis envoyé.</Empty>}
+        {data.q.length ? <List>{data.q.map((q) => <Row key={q.id} title={name(q.client_id)} subtitle={`${q.number} · ${q.title} · ${money(q.total)}`} right={quotePill(q.status)} />)}</List> : <Empty icon={FileText} tone="violet">Aucun devis envoyé.</Empty>}
       </Section>
     </div>
   );
@@ -108,8 +118,8 @@ export function OrderDetail() {
 
   return (
     <div className="flex flex-col gap-5">
-      <TopBar title={o.number} back="/commandes" />
-      <div className="rounded-2xl bg-brand-600 p-5 text-white">
+      <TopBar icon={Scissors} tone="violet" title={o.number} back="/commandes" />
+      <div className="rounded-2xl bg-gradient-to-br from-brand-600 to-brand-500 p-5 text-white shadow-[0_16px_30px_-20px_rgba(29,78,216,0.9)]">
         <div className="text-xs font-bold uppercase tracking-wider text-white/80">{c.full_name}</div>
         <div className="mt-1 text-2xl font-extrabold">{o.title}</div>
         {o.fabric && <div className="text-sm text-white/85">{o.fabric}</div>}
@@ -160,7 +170,7 @@ export function OrderNew() {
   const [busy, setBusy] = useState(false);
   const set = (k: keyof typeof f) => (e: { target: { value: string } }) => setF({ ...f, [k]: e.target.value });
   if (loading) return <Loading />;
-  if (!clients?.length) return <div className="flex flex-col gap-4"><TopBar title="Nouvelle commande" back /><Empty>Ajoutez d'abord un client. <button className="font-semibold text-brand-700" onClick={() => nav('/clients/nouveau')}>Nouveau client</button></Empty></div>;
+  if (!clients?.length) return <div className="flex flex-col gap-4"><TopBar icon={ShoppingBag} tone="blue" title="Nouvelle commande" back /><Empty>Ajoutez d'abord un client. <button className="font-semibold text-brand-700" onClick={() => nav('/clients/nouveau')}>Nouveau client</button></Empty></div>;
   const submit = async (e: FormEvent) => {
     e.preventDefault(); setBusy(true);
     const price = parseInt(f.price.replace(/\D/g, ''), 10) || 0;
@@ -173,7 +183,7 @@ export function OrderNew() {
   };
   return (
     <form onSubmit={submit} className="flex max-w-xl flex-col gap-4">
-      <TopBar title="Nouvelle commande" back />
+      <TopBar icon={ShoppingBag} tone="blue" title="Nouvelle commande" back />
       <Field label="Client"><Select value={f.client} onChange={set('client')} required><option value="">Choisir un client</option>{clients.map((c) => <option key={c.id} value={c.id}>{c.full_name}</option>)}</Select></Field>
       <Field label="Modèle"><Input value={f.title} onChange={set('title')} placeholder="Ex. Grand boubou bazin brodé" required /></Field>
       <Field label="Tissu"><Input value={f.fabric} onChange={set('fabric')} placeholder="Ex. Bazin riche indigo, fourni par le client" /></Field>
@@ -206,7 +216,7 @@ export function QuoteNew() {
   const total = useMemo(() => lines.reduce((s, l) => s + (parseInt(l.amount.replace(/\D/g, ''), 10) || 0), 0), [lines]);
 
   if (loading) return <Loading />;
-  if (!clients?.length) return <div className="flex flex-col gap-4"><TopBar title="Nouveau devis" back /><Empty>Ajoutez d'abord un client. <button className="font-semibold text-brand-700" onClick={() => nav('/clients/nouveau')}>Nouveau client</button></Empty></div>;
+  if (!clients?.length) return <div className="flex flex-col gap-4"><TopBar icon={FileText} tone="violet" title="Nouveau devis" back /><Empty>Ajoutez d'abord un client. <button className="font-semibold text-brand-700" onClick={() => nav('/clients/nouveau')}>Nouveau client</button></Empty></div>;
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
@@ -224,7 +234,7 @@ export function QuoteNew() {
 
   return (
     <form onSubmit={submit} className="flex max-w-2xl flex-col gap-4">
-      <TopBar title="Nouveau devis" back />
+      <TopBar icon={FileText} tone="violet" title="Nouveau devis" back />
       <Field label="Client"><Select value={client} onChange={(e) => setClient(e.target.value)} required><option value="">Choisir un client</option>{clients.map((c) => <option key={c.id} value={c.id}>{c.full_name}{c.user_id ? '' : ' (sans espace)'}</option>)}</Select></Field>
       <Field label="Modèle"><Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Ex. Robe de soirée bazin" required /></Field>
       <Card>

@@ -1,11 +1,11 @@
 import { useState, type FormEvent } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ExternalLink, Plus, ShieldCheck, Store, Users, Wallet, TrendingUp } from 'lucide-react';
+import { ExternalLink, Plus, ShieldCheck, Store, Users, Wallet, TrendingUp, CreditCard, Layers, LayoutDashboard, Receipt, ScrollText, Settings as SettingsIcon, CheckCheck, User, Crown } from 'lucide-react';
 import { supabase, errMsg } from '../../lib/supabase';
 import { must, useAuth, useLoad } from '../../lib/auth';
 import { dateFr, dateTimeFr, daysLeft, METHODS, money } from '../../lib/format';
 import { accessOf, type Access, type AdminLog, type PaymentRequest, type Plan, type Profile, type Settings, type Workshop } from '../../lib/types';
-import { Avatar, Button, Card, Chips, Empty, Field, Input, KV, List, Loading, Notice, Pill, Row, Section, Select, Sheet, Stat, Textarea, TopBar, useToast } from '../../components/ui';
+import { Avatar, Button, Card, IconTile, Chips, Empty, Field, Input, KV, List, Loading, Notice, Pill, Row, Section, Select, Sheet, Stat, Textarea, TopBar, useToast } from '../../components/ui';
 import { ChangePassword } from '../auth/AuthPages';
 
 export function accessPill(a: Access) {
@@ -46,7 +46,7 @@ export function AdminHome() {
   const name = (id: string) => data.ws.find((w) => w.id === id)?.name ?? '—';
   return (
     <div className="flex flex-col gap-5">
-      <TopBar title="Tableau de bord" sub="Superadministrateur" />
+      <TopBar icon={LayoutDashboard} tone="blue" title="Tableau de bord" sub="Superadministrateur" />
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
         <Stat icon={Store} iconTone="violet" label="Ateliers" value={data.ws.length} sub={`${cnt('active')} actifs · ${cnt('trial')} en essai`} />
         <Stat icon={Users} iconTone="green" label="Clients sur la plateforme" value={data.clients.length} />
@@ -59,7 +59,7 @@ export function AdminHome() {
       </Card>
       <div className="grid gap-5 md:grid-cols-2">
         <Section title="Demandes en attente">
-          {pending.length ? <List>{pending.slice(0, 5).map((r) => <Row key={r.id} onClick={() => nav(`/admin/paiements/${r.id}`)} title={name(r.workshop_id)} subtitle={`${METHODS[r.method].label} · ${dateTimeFr(r.created_at)}`} right={<span className="font-semibold tabular-nums">{money(r.amount)}</span>} />)}</List> : <Empty>Rien à vérifier.</Empty>}
+          {pending.length ? <List>{pending.slice(0, 5).map((r) => <Row key={r.id} onClick={() => nav(`/admin/paiements/${r.id}`)} title={name(r.workshop_id)} subtitle={`${METHODS[r.method].label} · ${dateTimeFr(r.created_at)}`} right={<span className="font-semibold tabular-nums">{money(r.amount)}</span>} />)}</List> : <Empty icon={CheckCheck} tone="green">Rien à vérifier.</Empty>}
         </Section>
         <Section title="Essais qui se terminent (7 jours)">
           {ending.length ? <List>{ending.map((w) => <Row key={w.id} onClick={() => nav(`/admin/ateliers/${w.id}`)} left={<Avatar name={w.name} />} title={w.name} subtitle={accessInfo(w, data.plans)} />)}</List> : <Empty>Aucun essai ne se termine cette semaine.</Empty>}
@@ -81,14 +81,14 @@ export function AdminPayments() {
   const name = (id: string) => data.ws.find((w) => w.id === id)?.name ?? '—';
   return (
     <div className="flex flex-col gap-4">
-      <TopBar title="Paiements" />
+      <TopBar icon={CreditCard} tone="green" title="Paiements" />
       <Chips value={f} onChange={setF} options={[['pending', 'À vérifier'], ['validated', 'Validés'], ['rejected', 'Rejetés']]} />
       {list.length ? <List>{list.map((r) => (
         <Row key={r.id} onClick={() => nav(`/admin/paiements/${r.id}`)}
           left={<span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl text-xs font-extrabold" style={{ background: METHODS[r.method].bg, color: METHODS[r.method].fg }}>{METHODS[r.method].short}</span>}
           title={name(r.workshop_id)} subtitle={`${data.plans.find((p) => p.id === r.plan_id)?.name} ${r.months} mois · réf. ${r.reference} · ${dateTimeFr(r.created_at)}`}
           right={<span className="font-semibold tabular-nums">{money(r.amount)}</span>} />
-      ))}</List> : <Empty>Aucune demande ici.</Empty>}
+      ))}</List> : <Empty icon={CreditCard} tone="green">Aucune demande ici.</Empty>}
     </div>
   );
 }
@@ -125,7 +125,7 @@ export function AdminPayment() {
   const isPdf = r.proof_path.toLowerCase().endsWith('.pdf');
   return (
     <div className="flex flex-col gap-4">
-      <TopBar title="Demande de paiement" back="/admin/paiements" />
+      <TopBar icon={Receipt} tone="green" title="Demande de paiement" back="/admin/paiements" />
       <div className="grid gap-4 md:grid-cols-2">
         <div className="flex flex-col gap-4">
           <Card>
@@ -175,13 +175,13 @@ export function AdminWorkshops() {
   const list = data.ws.filter((w) => (f === 'all' || accessOf(w) === f) && (w.name + (owner(w)?.full_name ?? '') + w.city).toLowerCase().includes(q.toLowerCase()));
   return (
     <div className="flex flex-col gap-4">
-      <TopBar title="Ateliers" />
+      <TopBar icon={Store} tone="violet" title="Ateliers" />
       <Input placeholder="Rechercher un atelier, un tailleur, une ville" value={q} onChange={(e) => setQ(e.target.value)} />
       <Chips value={f} onChange={setF} options={[['all', 'Tous'], ['trial', 'Essai'], ['active', 'Actifs'], ['expired', 'Expirés'], ['suspended', 'Suspendus']]} />
       {list.length ? <List>{list.map((w, i) => (
         <Row key={w.id} onClick={() => nav(`/admin/ateliers/${w.id}`)} left={<Avatar name={w.name} tone={i} />} title={w.name}
           subtitle={`${owner(w)?.full_name ?? '—'} · ${w.city || '—'} · ${data.clients.filter((c) => c.workshop_id === w.id).length} clients · ${accessInfo(w, data.plans)}`} right={accessPill(accessOf(w))} />
-      ))}</List> : <Empty>Aucun atelier.</Empty>}
+      ))}</List> : <Empty icon={Store} tone="violet">Aucun atelier.</Empty>}
     </div>
   );
 }
@@ -209,7 +209,7 @@ export function AdminWorkshop() {
   };
   return (
     <div className="flex flex-col gap-5">
-      <TopBar title={w.name} back="/admin/ateliers" />
+      <TopBar icon={Store} tone="violet" title={w.name} back="/admin/ateliers" />
       <Card>
         <div className="flex items-center gap-3"><Avatar name={w.name} /><div className="min-w-0 flex-1"><div className="font-bold">{w.city || '—'} · {w.phone || '—'}</div><div className="text-xs text-muted">Inscrit le {dateFr(w.created_at)} · {data.clients.filter((c) => c.workshop_id === w.id).length} clients</div></div>{accessPill(a)}</div>
         <div className="mt-3 text-sm">{accessInfo(w, data.plans)}</div>
@@ -267,11 +267,11 @@ export function AdminPlans() {
   };
   return (
     <div className="flex flex-col gap-4">
-      <TopBar title="Forfaits" right={<Button size="sm" onClick={() => setEdit({ name: '', price_monthly: 0, max_staff: 1, perks: [], is_active: true })}><Plus className="h-4 w-4" />Nouveau</Button>} />
+      <TopBar icon={Layers} tone="gold" title="Forfaits" right={<Button size="sm" onClick={() => setEdit({ name: '', price_monthly: 0, max_staff: 1, perks: [], is_active: true })}><Plus className="h-4 w-4" />Nouveau</Button>} />
       <div className="grid gap-3 md:grid-cols-3">
-        {data.map((p) => (
+        {data.map((p, pi) => (
           <Card key={p.id} onClick={() => setEdit(p)} className={p.is_active ? '' : 'opacity-60'}>
-            <div className="flex items-center justify-between"><span className="font-bold">{p.name}</span>{!p.is_active && <Pill>Masqué</Pill>}</div>
+            <div className="flex items-center justify-between"><span className="flex items-center gap-2.5"><IconTile icon={[User, Users, Crown][pi % 3]} tone={(['blue', 'violet', 'gold'] as const)[pi % 3]} size={38} /><span className="font-extrabold">{p.name}</span></span>{!p.is_active && <Pill>Masqué</Pill>}</div>
             <div className="text-xl font-extrabold tabular-nums">{money(p.price_monthly)} <span className="text-sm font-medium text-muted">/ mois</span></div>
             <div className="text-xs text-muted">{p.max_staff} compte(s) max{p.max_clients ? ` · ${p.max_clients} clients max` : ''}</div>
             <ul className="mt-2 list-disc pl-4 text-xs text-muted">{p.perks.map((x) => <li key={x}>{x}</li>)}</ul>
@@ -322,7 +322,7 @@ export function AdminSettings() {
   const set = (k: keyof Settings) => (e: { target: { value: string } }) => setF({ ...v, [k]: k === 'trial_max_staff' ? Number(e.target.value) || 1 : e.target.value });
   return (
     <div className="flex flex-col gap-6">
-      <TopBar title="Réglages" />
+      <TopBar icon={SettingsIcon} tone="slate" title="Réglages" />
       <form onSubmit={save} className="flex max-w-xl flex-col gap-4">
         <h2 className="font-bold">Numéros de dépôt affichés aux tailleurs</h2>
         {!data.number_orange_money && !data.number_wave && !data.number_moov_money && <Notice tone="warn">Aucun numéro configuré : les tailleurs ne peuvent pas encore payer leur abonnement.</Notice>}
@@ -359,8 +359,8 @@ export function AdminLogs() {
   });
   return (
     <div className="flex flex-col gap-4">
-      <TopBar title="Journal des opérations" back />
-      {loading ? <Loading /> : data?.length ? <List>{data.map((l) => <Row key={l.id} title={logLabel(l)} subtitle={dateTimeFr(l.created_at)} />)}</List> : <Empty>Aucune opération enregistrée.</Empty>}
+      <TopBar icon={ScrollText} tone="slate" title="Journal des opérations" back />
+      {loading ? <Loading /> : data?.length ? <List>{data.map((l) => <Row key={l.id} title={logLabel(l)} subtitle={dateTimeFr(l.created_at)} />)}</List> : <Empty icon={ScrollText} tone="slate">Aucune opération enregistrée.</Empty>}
     </div>
   );
 }

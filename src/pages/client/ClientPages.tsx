@@ -1,11 +1,11 @@
 import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Phone } from 'lucide-react';
+import { Phone, FileText, Ruler, Scissors, ShoppingBag, Wallet } from 'lucide-react';
 import { supabase, errMsg } from '../../lib/supabase';
 import { must, useAuth, useLoad } from '../../lib/auth';
 import { dateFr, MEASURES, money, STEPS } from '../../lib/format';
 import { paidOf, type Client, type Measurement, type Order, type OrderPayment, type Quote, type Workshop } from '../../lib/types';
-import { Button, Card, Empty, KV, List, Loading, Notice, Pill, Row, Section, Steps, TopBar, useToast } from '../../components/ui';
+import { Button, Card, IconTile, Empty, KV, List, Loading, Notice, Pill, Row, Section, Steps, TopBar, useToast } from '../../components/ui';
 import { quotePill, Timeline } from '../tailor/Orders';
 import { stepPill } from '../tailor/Home';
 import { ChangePassword } from '../auth/AuthPages';
@@ -54,13 +54,13 @@ export function ClientHome() {
           </button>
         ))}
       </div>
-      {!open.length && !pendingQ.length && <Empty>Aucune commande en cours pour le moment.</Empty>}
+      {!open.length && !pendingQ.length && <Empty icon={Scissors} tone="indigo">Aucune commande en cours pour le moment.</Empty>}
       <div className="grid grid-cols-2 gap-3">
-        <Card><div className="text-[11px] font-bold uppercase tracking-wider text-muted">Reste à payer</div><div className="text-xl font-extrabold tabular-nums">{money(due)}</div></Card>
-        <Card onClick={() => nav('/espace/mesures')}><div className="text-[11px] font-bold uppercase tracking-wider text-muted">Mes mesures</div><div className="text-sm font-semibold">{data.measures[0] ? `Mises à jour le ${dateFr(data.measures[0].taken_at)}` : 'Pas encore relevées'}</div></Card>
+        <Card><div className="mb-2"><IconTile icon={Wallet} tone="orange" /></div><div className="text-[11px] font-bold uppercase tracking-wider text-muted">Reste à payer</div><div className="text-xl font-extrabold tabular-nums">{money(due)}</div></Card>
+        <Card onClick={() => nav('/espace/mesures')}><div className="mb-2"><IconTile icon={Ruler} tone="teal" /></div><div className="text-[11px] font-bold uppercase tracking-wider text-muted">Mes mesures</div><div className="text-sm font-semibold">{data.measures[0] ? `Mises à jour le ${dateFr(data.measures[0].taken_at)}` : 'Pas encore relevées'}</div></Card>
       </div>
       <Section title="Mon atelier">
-        <List>{data.workshops.map((w) => <Row key={w.id} left={<span className="grid h-10 w-10 place-items-center rounded-xl bg-brand-50 text-brand-700"><Phone className="h-5 w-5" /></span>} title={w.name} subtitle={[w.phone, w.city].filter(Boolean).join(' · ')} />)}</List>
+        <List>{data.workshops.map((w) => <Row key={w.id} left={<IconTile icon={Phone} tone="green" />} title={w.name} subtitle={[w.phone, w.city].filter(Boolean).join(' · ')} />)}</List>
       </Section>
     </div>
   );
@@ -72,8 +72,8 @@ export function ClientQuotes() {
   if (loading || !data) return <Loading />;
   return (
     <div className="flex flex-col gap-4">
-      <TopBar title="Mes devis" />
-      {data.quotes.length ? <List>{data.quotes.map((q) => <Row key={q.id} onClick={() => nav(`/espace/devis/${q.id}`)} title={q.title} subtitle={`${q.number} · ${dateFr(q.created_at)} · ${money(q.total)}`} right={quotePill(q.status)} />)}</List> : <Empty>Aucun devis.</Empty>}
+      <TopBar icon={FileText} tone="violet" title="Mes devis" />
+      {data.quotes.length ? <List>{data.quotes.map((q) => <Row key={q.id} onClick={() => nav(`/espace/devis/${q.id}`)} title={q.title} subtitle={`${q.number} · ${dateFr(q.created_at)} · ${money(q.total)}`} right={quotePill(q.status)} />)}</List> : <Empty icon={FileText} tone="violet">Aucun devis.</Empty>}
     </div>
   );
 }
@@ -100,7 +100,7 @@ export function ClientQuote() {
   };
   return (
     <div className="flex max-w-xl flex-col gap-4">
-      <TopBar title={q.number} back="/espace/devis" />
+      <TopBar icon={FileText} tone="violet" title={q.number} back="/espace/devis" />
       <Card>
         <div className="text-xs text-muted">{data.w.name} · {dateFr(q.created_at)}</div>
         <div className="mb-2 text-xl font-extrabold">{q.title}</div>
@@ -122,8 +122,8 @@ export function ClientOrders() {
   if (loading || !data) return <Loading />;
   return (
     <div className="flex flex-col gap-4">
-      <TopBar title="Mes commandes" />
-      {data.orders.length ? <List>{data.orders.map((o) => <Row key={o.id} onClick={() => nav(`/espace/commandes/${o.id}`)} title={o.title} subtitle={`${o.number} · ${money(o.price)}`} right={stepPill(o.step)} />)}</List> : <Empty>Aucune commande.</Empty>}
+      <TopBar icon={ShoppingBag} tone="indigo" title="Mes commandes" />
+      {data.orders.length ? <List>{data.orders.map((o) => <Row key={o.id} onClick={() => nav(`/espace/commandes/${o.id}`)} title={o.title} subtitle={`${o.number} · ${money(o.price)}`} right={stepPill(o.step)} />)}</List> : <Empty icon={ShoppingBag} tone="indigo">Aucune commande.</Empty>}
     </div>
   );
 }
@@ -140,8 +140,8 @@ export function ClientOrder() {
   const paid = paidOf(p, o.id);
   return (
     <div className="flex flex-col gap-4">
-      <TopBar title={o.number} back="/espace/commandes" />
-      <div className="rounded-2xl bg-brand-600 p-5 text-white">
+      <TopBar icon={Scissors} tone="indigo" title={o.number} back="/espace/commandes" />
+      <div className="rounded-2xl bg-gradient-to-br from-brand-600 to-brand-500 p-5 text-white shadow-[0_16px_30px_-20px_rgba(29,78,216,0.9)]">
         <div className="text-2xl font-extrabold">{o.title}</div>
         {o.fabric && <div className="text-sm text-white/85">{o.fabric}</div>}
         <div className="mt-4"><Steps step={o.step} light /></div>
@@ -165,15 +165,15 @@ export function ClientMeasures() {
   const m = data.measures[0];
   return (
     <div className="flex flex-col gap-4">
-      <TopBar title="Mes mesures" />
+      <TopBar icon={Ruler} tone="teal" title="Mes mesures" />
       {m ? (
         <>
           <div className="text-sm text-muted">Relevées par l'atelier le {dateFr(m.taken_at)}</div>
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-            {MEASURES.filter(([k]) => m.values[k] != null).map(([k, l]) => <div key={k} className="rounded-xl border border-line bg-white p-3"><div className="text-xs text-muted">{l}</div><div className="text-lg font-extrabold tabular-nums">{m.values[k]} <span className="text-xs font-medium text-muted">cm</span></div></div>)}
+            {MEASURES.filter(([k]) => m.values[k] != null).map(([k, l]) => <div key={k} className="rounded-xl border border-[#CCFBF1] bg-[#F0FDFA] p-3"><div className="text-xs text-muted">{l}</div><div className="text-lg font-extrabold tabular-nums">{m.values[k]} <span className="text-xs font-medium text-muted">cm</span></div></div>)}
           </div>
         </>
-      ) : <Empty>Votre atelier n'a pas encore enregistré vos mesures.</Empty>}
+      ) : <Empty icon={Ruler} tone="teal">Votre atelier n'a pas encore enregistré vos mesures.</Empty>}
       <Notice>Vos mesures sont privées : seuls vous et votre atelier y avez accès. Pour les modifier, demandez une nouvelle prise de mesures.</Notice>
     </div>
   );
@@ -187,9 +187,9 @@ export function ClientPayments() {
   const num = (id: string) => data.orders.find((o) => o.id === id)?.number ?? '';
   return (
     <div className="flex flex-col gap-5">
-      <TopBar title="Paiements" />
-      <div className="rounded-2xl bg-brand-100 p-4"><div className="text-[11px] font-bold uppercase tracking-wider text-brand-700">Reste à payer</div><div className="text-2xl font-extrabold tabular-nums">{money(due)}</div></div>
-      {data.pays.length ? <List>{data.pays.map((p) => <Row key={p.id} title={`${p.note || 'Paiement'} · ${num(p.order_id)}`} subtitle={`${dateFr(p.paid_at)} · ${p.method}`} right={<span className="font-semibold tabular-nums">{money(p.amount)}</span>} />)}</List> : <Empty>Aucun paiement enregistré.</Empty>}
+      <TopBar icon={Wallet} tone="green" title="Paiements" />
+      <div className="flex items-center gap-4 rounded-2xl bg-gradient-to-br from-brand-600 to-brand-500 p-4 text-white"><IconTile icon={Wallet} tone="gold" solid size={48} /><div><div className="text-[11px] font-bold uppercase tracking-wider text-brand-100">Reste à payer</div><div className="text-2xl font-extrabold tabular-nums">{money(due)}</div></div></div>
+      {data.pays.length ? <List>{data.pays.map((p) => <Row key={p.id} title={`${p.note || 'Paiement'} · ${num(p.order_id)}`} subtitle={`${dateFr(p.paid_at)} · ${p.method}`} right={<span className="font-semibold tabular-nums">{money(p.amount)}</span>} />)}</List> : <Empty icon={Wallet} tone="green">Aucun paiement enregistré.</Empty>}
       <Section title="Mon compte"><ChangePassword /><Button variant="ghost" className="max-w-md" onClick={signOut}>Se déconnecter</Button></Section>
     </div>
   );
