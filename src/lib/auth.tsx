@@ -51,7 +51,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setSession(data.session);
     await load(data.session);
   }, [load]);
-  const signOut = useCallback(async () => { await supabase.auth.signOut(); }, []);
+  // Déconnexion immédiate : on efface la session sur l'appareil sans attendre le serveur
+  // (sur une connexion mobile lente, l'appel réseau pouvait bloquer longtemps).
+  const signOut = useCallback(async () => {
+    setSession(null); setProfile(null); setWorkshop(null);
+    try {
+      await Promise.race([supabase.auth.signOut({ scope: 'local' }), new Promise((r) => setTimeout(r, 1500))]);
+    } catch { /* ignoré : la session locale est effacée juste après */ }
+    try { Object.keys(localStorage).filter((k) => k.startsWith('sb-')).forEach((k) => localStorage.removeItem(k)); } catch { /* stockage indisponible */ }
+    window.location.replace('/connexion');
+  }, []);
 
   return <Ctx.Provider value={{ session, profile, workshop, loading, refresh, signOut }}>{children}</Ctx.Provider>;
 }
