@@ -1,23 +1,25 @@
 import { createContext, useCallback, useContext, useState, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes, type TextareaHTMLAttributes } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Loader2, X, MessageCircle, Info, AlertTriangle, CheckCircle2 } from 'lucide-react';
+import { ArrowLeft, Loader2, X, MessageCircle, Info, AlertTriangle, CheckCircle2, type LucideIcon } from 'lucide-react';
+import { TONES, avatarTone, type Tone } from '../lib/tones';
 import { initials } from '../lib/format';
 
 const cx = (...c: (string | false | null | undefined)[]) => c.filter(Boolean).join(' ');
 
 export function Button({ variant = 'primary', size = 'md', loading, className, children, ...p }:
-  ButtonHTMLAttributes<HTMLButtonElement> & { variant?: 'primary' | 'ghost' | 'soft' | 'danger' | 'dark'; size?: 'sm' | 'md'; loading?: boolean }) {
+  ButtonHTMLAttributes<HTMLButtonElement> & { variant?: 'primary' | 'ghost' | 'soft' | 'danger' | 'dark' | 'whatsapp'; size?: 'sm' | 'md'; loading?: boolean }) {
   const v = {
-    primary: 'bg-brand-600 text-white hover:bg-brand-700',
+    primary: 'bg-gradient-to-b from-brand-500 to-brand-600 text-white shadow-[0_8px_16px_-8px_rgba(29,78,216,0.75),inset_0_1px_0_rgba(255,255,255,0.25)] hover:to-brand-700',
     ghost: 'bg-white text-ink border border-line hover:bg-canvas',
     soft: 'bg-brand-100 text-brand-700 hover:bg-brand-200',
-    danger: 'bg-red-50 text-red-700 hover:bg-red-100',
-    dark: 'bg-ink text-white hover:bg-black'
+    danger: 'bg-white text-red-700 border-[1.5px] border-red-200 hover:bg-red-50',
+    dark: 'bg-ink text-white hover:bg-black',
+    whatsapp: 'bg-[#25D366] text-white shadow-[0_8px_16px_-8px_rgba(37,211,102,0.8)] hover:brightness-95'
   }[variant];
-  const s = size === 'sm' ? 'px-3 py-2 text-sm rounded-xl' : 'px-4 py-3 rounded-xl';
+  const s = size === 'sm' ? 'px-3 py-2 text-sm rounded-xl' : 'px-4 py-3 rounded-2xl';
   return (
     <button {...p} disabled={p.disabled || loading}
-      className={cx('inline-flex items-center justify-center gap-2 font-semibold transition disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2', v, s, className)}>
+      className={cx('inline-flex items-center justify-center gap-2 font-bold transition disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2', v, s, className)}>
       {loading && <Loader2 className="h-4 w-4 animate-spin" />}{children}
     </button>
   );
@@ -41,9 +43,20 @@ export function Pill({ tone = 'grey', children }: { tone?: 'blue' | 'ok' | 'warn
   return <span className={cx('inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-semibold', t)}>{children}</span>;
 }
 
-export function Avatar({ name, tone = 0 }: { name: string; tone?: number }) {
-  const t = ['bg-brand-100 text-brand-700', 'bg-sky-100 text-sky-800', 'bg-indigo-100 text-indigo-700'][tone % 3];
-  return <span className={cx('grid h-11 w-11 shrink-0 place-items-center rounded-xl text-sm font-bold', t)}>{initials(name)}</span>;
+export function Avatar({ name }: { name: string; tone?: number }) {
+  const t = TONES[avatarTone(name)];
+  return <span className="grid h-11 w-11 shrink-0 place-items-center rounded-full text-sm font-bold" style={{ background: t.bg, color: t.text }}>{initials(name)}</span>;
+}
+
+/** Icône posée sur une pastille de couleur. */
+export function IconTile({ icon: I, tone, size = 40, solid }: { icon: LucideIcon; tone: Tone; size?: number; solid?: boolean }) {
+  const t = TONES[tone];
+  return (
+    <span className="grid shrink-0 place-items-center"
+      style={{ width: size, height: size, borderRadius: size * 0.3, background: solid ? t.fg : t.bg, color: solid ? '#FFFFFF' : t.fg, boxShadow: solid ? `0 6px 12px -6px ${t.fg}` : undefined }}>
+      <I style={{ width: size * 0.52, height: size * 0.52 }} strokeWidth={2.1} />
+    </span>
+  );
 }
 
 export function TopBar({ title, back, right, sub }: { title: string; back?: boolean | string; right?: ReactNode; sub?: string }) {
@@ -96,12 +109,15 @@ export function Loading() {
   return <div className="flex justify-center py-16 text-brand-600"><Loader2 className="h-7 w-7 animate-spin" /></div>;
 }
 
-export function Stat({ label, value, sub, tone }: { label: string; value: ReactNode; sub?: ReactNode; tone?: 'blue' }) {
+export function Stat({ label, value, sub, tone, icon, iconTone = 'blue' }: { label: string; value: ReactNode; sub?: ReactNode; tone?: 'blue'; icon?: LucideIcon; iconTone?: Tone }) {
   return (
-    <div className={cx('flex flex-col gap-1 rounded-2xl border p-4', tone === 'blue' ? 'border-transparent bg-brand-600 text-white' : 'border-line bg-white')}>
-      <span className={cx('text-[11px] font-bold uppercase tracking-wider', tone === 'blue' ? 'text-white/80' : 'text-muted')}>{label}</span>
-      <span className="text-xl font-extrabold tabular-nums md:text-2xl">{value}</span>
-      {sub && <span className={cx('text-xs', tone === 'blue' ? 'text-white/80' : 'text-muted')}>{sub}</span>}
+    <div className={cx('flex flex-col gap-2.5 rounded-2xl border p-4', tone === 'blue' ? 'border-transparent bg-brand-600 text-white' : 'border-line bg-white')}>
+      {icon && <IconTile icon={icon} tone={iconTone} />}
+      <div className="flex flex-col gap-0.5">
+        <span className="text-xl font-extrabold tabular-nums md:text-2xl">{value}</span>
+        <span className={cx('text-xs font-semibold', tone === 'blue' ? 'text-white/80' : 'text-muted')}>{label}</span>
+        {sub && <span className={cx('text-xs', tone === 'blue' ? 'text-white/80' : 'text-muted')}>{sub}</span>}
+      </div>
     </div>
   );
 }

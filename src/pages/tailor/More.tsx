@@ -5,7 +5,7 @@ import { supabase, errMsg } from '../../lib/supabase';
 import { must, useAuth, useLoad } from '../../lib/auth';
 import { appUrl, dateFr, daysLeft, METHODS, money, type MethodKey } from '../../lib/format';
 import { accessOf, paidOf, type Appointment, type Client, type Order, type OrderPayment, type PaymentRequest, type Plan, type Profile, type Settings } from '../../lib/types';
-import { Avatar, Button, Card, Chips, Empty, Field, Input, KV, List, Loading, Notice, Pill, Row, Section, Select, Sheet, Stat, TopBar, WhatsAppSheet, useToast } from '../../components/ui';
+import { Avatar, Button, Card, IconTile, Chips, Empty, Field, Input, KV, List, Loading, Notice, Pill, Row, Section, Select, Sheet, Stat, TopBar, WhatsAppSheet, useToast } from '../../components/ui';
 import { ChangePassword } from '../auth/AuthPages';
 import { useCanWrite } from './Clients';
 
@@ -83,8 +83,8 @@ export function More() {
         <div className="min-w-0"><div className="truncate font-bold">{profile?.full_name}</div><div className="truncate text-sm text-white/85">{workshop?.name} · {owner ? 'Propriétaire' : 'Employé'}</div></div>
       </div>
       <List>
-        {items.filter((i) => i[4]).map(([to, I, l, d]) => <Row key={to} onClick={() => nav(to)} left={<span className="grid h-10 w-10 place-items-center rounded-xl bg-brand-50 text-brand-700"><I className="h-5 w-5" /></span>} title={l} subtitle={d} right={<span className="text-muted">›</span>} />)}
-        <Row onClick={signOut} left={<span className="grid h-10 w-10 place-items-center rounded-xl bg-red-50 text-red-600"><LogOut className="h-5 w-5" /></span>} title="Se déconnecter" />
+        {items.filter((i) => i[4]).map(([to, I, l, d], idx) => <Row key={to} onClick={() => nav(to)} left={<IconTile icon={I} tone={(['gold', 'pink', 'amber', 'slate'] as const)[idx % 4]} />} title={l} subtitle={d} right={<span className="text-muted">›</span>} />)}
+        <Row onClick={signOut} left={<IconTile icon={LogOut} tone="orange" />} title="Se déconnecter" />
       </List>
     </div>
   );

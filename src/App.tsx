@@ -1,5 +1,5 @@
 import { Navigate, Route, Routes } from 'react-router-dom';
-import { CreditCard, FileText, Home, Layers, LayoutDashboard, MoreHorizontal, Ruler, Settings as Cog, ShoppingBag, Store, Users, Wallet, CalendarDays } from 'lucide-react';
+import { CreditCard, FileText, Home, Layers, LayoutDashboard, LayoutGrid, Ruler, Settings as Cog, ShoppingBag, Store, Users, Wallet, CalendarDays } from 'lucide-react';
 import { useAuth } from './lib/auth';
 import { accessOf } from './lib/types';
 import { Loading } from './components/ui';
@@ -14,25 +14,25 @@ import { ClientHome, ClientMeasures, ClientOrder, ClientOrders, ClientPayments, 
 import { AdminHome, AdminLogs, AdminPayment, AdminPayments, AdminPlans, AdminSettings, AdminWorkshop, AdminWorkshops } from './pages/admin/AdminPages';
 
 const tailorNav: NavItem[] = [
-  { to: '/accueil', label: 'Accueil', icon: Home },
-  { to: '/clients', label: 'Clients', icon: Users },
-  { to: '/commandes', label: 'Commandes', icon: ShoppingBag },
-  { to: '/agenda', label: 'Agenda', icon: CalendarDays },
-  { to: '/plus', label: 'Plus', icon: MoreHorizontal }
+  { to: '/accueil', label: 'Accueil', icon: Home, tone: 'blue' },
+  { to: '/clients', label: 'Clients', icon: Users, tone: 'green' },
+  { to: '/commandes', label: 'Commandes', icon: ShoppingBag, tone: 'violet' },
+  { to: '/agenda', label: 'Agenda', icon: CalendarDays, tone: 'orange' },
+  { to: '/plus', label: 'Plus', icon: LayoutGrid, tone: 'slate' }
 ];
 const clientNav: NavItem[] = [
-  { to: '/espace', label: 'Accueil', icon: Home, end: true },
-  { to: '/espace/devis', label: 'Devis', icon: FileText },
-  { to: '/espace/commandes', label: 'Commandes', icon: ShoppingBag },
-  { to: '/espace/mesures', label: 'Mesures', icon: Ruler },
-  { to: '/espace/paiements', label: 'Paiements', icon: Wallet }
+  { to: '/espace', label: 'Accueil', icon: Home, tone: 'blue', end: true },
+  { to: '/espace/devis', label: 'Devis', icon: FileText, tone: 'violet' },
+  { to: '/espace/commandes', label: 'Commandes', icon: ShoppingBag, tone: 'indigo' },
+  { to: '/espace/mesures', label: 'Mesures', icon: Ruler, tone: 'teal' },
+  { to: '/espace/paiements', label: 'Paiements', icon: Wallet, tone: 'green' }
 ];
 const adminNav: NavItem[] = [
-  { to: '/admin', label: 'Tableau', icon: LayoutDashboard, end: true },
-  { to: '/admin/paiements', label: 'Paiements', icon: CreditCard },
-  { to: '/admin/ateliers', label: 'Ateliers', icon: Store },
-  { to: '/admin/forfaits', label: 'Forfaits', icon: Layers },
-  { to: '/admin/reglages', label: 'Réglages', icon: Cog }
+  { to: '/admin', label: 'Tableau', icon: LayoutDashboard, tone: 'blue', end: true },
+  { to: '/admin/paiements', label: 'Paiements', icon: CreditCard, tone: 'green' },
+  { to: '/admin/ateliers', label: 'Ateliers', icon: Store, tone: 'violet' },
+  { to: '/admin/forfaits', label: 'Forfaits', icon: Layers, tone: 'gold' },
+  { to: '/admin/reglages', label: 'Réglages', icon: Cog, tone: 'slate' }
 ];
 
 

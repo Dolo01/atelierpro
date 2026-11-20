@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ExternalLink, Plus, ShieldCheck } from 'lucide-react';
+import { ExternalLink, Plus, ShieldCheck, Store, Users, Wallet, TrendingUp } from 'lucide-react';
 import { supabase, errMsg } from '../../lib/supabase';
 import { must, useAuth, useLoad } from '../../lib/auth';
 import { dateFr, dateTimeFr, daysLeft, METHODS, money } from '../../lib/format';
@@ -48,10 +48,10 @@ export function AdminHome() {
     <div className="flex flex-col gap-5">
       <TopBar title="Tableau de bord" sub="Superadministrateur" />
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-        <Stat tone="blue" label="Ateliers" value={data.ws.length} sub={`${cnt('active')} actifs · ${cnt('trial')} en essai`} />
-        <Stat label="Clients sur la plateforme" value={data.clients.length} />
-        <Stat label="Encaissé ce mois" value={money(month)} />
-        <Stat label="Encaissé au total" value={money(total)} />
+        <Stat icon={Store} iconTone="violet" label="Ateliers" value={data.ws.length} sub={`${cnt('active')} actifs · ${cnt('trial')} en essai`} />
+        <Stat icon={Users} iconTone="green" label="Clients sur la plateforme" value={data.clients.length} />
+        <Stat icon={Wallet} iconTone="blue" label="Encaissé ce mois" value={money(month)} />
+        <Stat icon={TrendingUp} iconTone="pink" label="Encaissé au total" value={money(total)} />
       </div>
       <Card onClick={() => nav('/admin/paiements')} className={pending.length ? '!border-amber-200 !bg-amber-50' : ''}>
         <div className="flex items-center justify-between"><span className="text-[11px] font-bold uppercase tracking-wider text-muted">Paiements à vérifier</span><span className="text-2xl font-extrabold">{pending.length}</span></div>

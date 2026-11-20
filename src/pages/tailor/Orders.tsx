@@ -122,7 +122,7 @@ export function OrderDetail() {
           <Timeline step={o.step} />
           <div className="mt-4 flex flex-col gap-2">
             {o.step < 5 && canWrite && <Button onClick={next} loading={busy}>Passer à « {STEPS[o.step + 1]} »</Button>}
-            {c.phone && <Button variant="ghost" onClick={() => setWa(message())}><MessageCircle className="h-4 w-4" />Informer {first} sur WhatsApp</Button>}
+            {c.phone && <Button variant="whatsapp" onClick={() => setWa(message())}><MessageCircle className="h-4 w-4" />Informer {first} sur WhatsApp</Button>}
           </div>
         </Card>
         <Card>
