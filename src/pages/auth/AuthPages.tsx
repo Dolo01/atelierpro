@@ -96,13 +96,14 @@ export function Signup() {
   );
 }
 
-interface InvInfo { status: 'ok' | 'used' | 'expired' | 'invalid'; kind?: 'client' | 'staff'; workshop?: string; name?: string; phone?: string; expires_at?: string }
+interface InvInfo { status: 'ok' | 'used' | 'expired' | 'invalid'; kind?: 'client' | 'staff'; workshop?: string; name?: string; phone?: string; has_account?: boolean; expires_at?: string }
 
 export function Invitation() {
   const { token = '' } = useParams();
   const nav = useNavigate();
-  const { session, profile, refresh } = useAuth();
+  const { session, profile, refresh, signOut } = useAuth();
   const [info, setInfo] = useState<InvInfo | null>(null);
+  const [mode, setMode] = useState<'new' | 'existing'>('new');
   const [phone, setPhone] = useState('');
   const [name, setName] = useState('');
   const [pw, setPw] = useState('');
@@ -114,6 +115,7 @@ export function Invitation() {
     supabase.rpc('get_invitation', { p_token: token }).then(({ data }) => {
       const d = (data ?? { status: 'invalid' }) as InvInfo;
       setInfo(d); setPhone(d.phone ?? ''); setName(d.name ?? '');
+      if (d.has_account) setMode('existing'); // ce numéro a déjà un compte : il suffit de se connecter
     });
   }, [token]);
 
@@ -121,7 +123,7 @@ export function Invitation() {
     const { data, error } = await supabase.rpc('accept_invitation', { p_token: token, p_full_name: name });
     if (error) throw error;
     await refresh();
-    nav(data === 'client' ? '/espace' : '/accueil', { replace: true });
+    nav(data === 'client' ? '/espace' : '/accueil', { replace: true, state: { welcome: info?.workshop } });
   };
 
   const submit = async (e: FormEvent) => {
@@ -129,14 +131,19 @@ export function Invitation() {
     setBusy(true);
     try {
       if (!session) {
-        if (pw !== pw2) throw new Error('Les deux mots de passe ne sont pas identiques.');
         const email = phoneToEmail(phone);
-        const up = await supabase.auth.signUp({ email, password: pw, options: { data: { full_name: name, phone: displayPhone(phone) } } });
-        if (up.error && /already registered/i.test(up.error.message)) {
+        if (mode === 'existing') {
           const si = await supabase.auth.signInWithPassword({ email, password: pw });
-          if (si.error) throw new Error('Un compte existe déjà avec ce numéro : saisissez son mot de passe.');
-        } else if (up.error) throw up.error;
-        else if (!up.data.session) throw new Error('Email not confirmed');
+          if (si.error) throw new Error('Numéro ou mot de passe incorrect. Utilisez le mot de passe de votre compte AtelierPro.');
+        } else {
+          if (pw !== pw2) throw new Error('Les deux mots de passe ne sont pas identiques.');
+          const up = await supabase.auth.signUp({ email, password: pw, options: { data: { full_name: name, phone: displayPhone(phone) } } });
+          if (up.error && /already registered/i.test(up.error.message)) {
+            setMode('existing'); setPw2('');
+            throw new Error('Ce numéro a déjà un compte AtelierPro : saisissez simplement son mot de passe.');
+          } else if (up.error) throw up.error;
+          else if (!up.data.session) throw new Error('Email not confirmed');
+        }
       }
       await finish();
     } catch (x) { setErr(errMsg(x)); } finally { setBusy(false); }
@@ -153,26 +160,52 @@ export function Invitation() {
     );
   }
   const isClient = info.kind === 'client';
+  const wrongAccount = !!session && profile && isClient && !['client', 'pending'].includes(profile.role);
+  const addToSpace = !!session && profile?.role === 'client' && isClient;
   return (
     <AuthFrame eyebrow="Invitation AtelierPro" title={`${info.workshop} vous invite`}
       subtitle={isClient ? 'Suivez vos commandes, vos devis, vos paiements et vos mesures.' : 'Rejoignez l\'équipe de l\'atelier.'}>
       <form onSubmit={submit} className="flex flex-col gap-4">
-        <h2 className="text-2xl font-extrabold">{isClient ? 'Activer mon espace client' : 'Rejoindre l\'atelier'}</h2>
+        <h2 className="text-2xl font-extrabold">{addToSpace ? `Ajouter ${info.workshop} à mon espace` : isClient ? (mode === 'existing' && !session ? 'Se connecter pour ajouter cet atelier' : 'Activer mon espace client') : 'Rejoindre l\'atelier'}</h2>
         <p className="text-xs text-muted">Lien personnel, valable jusqu'au {dateTimeFr(info.expires_at)}, utilisable une seule fois.</p>
-        <Field label="Nom complet"><Input value={name} onChange={(e) => setName(e.target.value)} required /></Field>
-        {session ? (
-          <Notice>Vous êtes connecté avec le numéro {profile?.phone || '—'}. L'invitation sera liée à ce compte.</Notice>
+
+        {wrongAccount ? (
+          <>
+            <Notice tone="warn">Vous êtes connecté avec un compte d'atelier ({profile?.phone}). Ce lien est destiné au client {info.name}. Déconnectez-vous, puis rouvrez le lien sur le téléphone du client.</Notice>
+            <Button type="button" variant="ghost" onClick={signOut}>Se déconnecter</Button>
+          </>
+        ) : session ? (
+          <>
+            {!addToSpace && <Field label="Nom complet"><Input value={name} onChange={(e) => setName(e.target.value)} required /></Field>}
+            <Notice>{addToSpace
+              ? `Vous êtes déjà client AtelierPro (${profile?.phone || ''}). ${info.workshop} s'ajoutera à votre espace : vous verrez ses commandes à côté de celles de vos autres ateliers, sans nouveau compte.`
+              : `Vous êtes connecté avec le numéro ${profile?.phone || '—'}. L'invitation sera liée à ce compte.`}</Notice>
+          </>
         ) : (
           <>
+            {isClient && (
+              <div className="grid grid-cols-2 gap-1 rounded-xl bg-canvas p-1 text-sm font-bold">
+                {([['new', 'Première fois'], ['existing', "J'ai déjà un compte"]] as const).map(([m, l]) => (
+                  <button key={m} type="button" onClick={() => { setMode(m); setErr(''); }}
+                    className={`rounded-lg py-2 ${mode === m ? 'bg-white text-ink shadow-sm' : 'text-muted'}`}>{l}</button>
+                ))}
+              </div>
+            )}
+            {mode === 'existing' && isClient && <Notice>Un seul compte suffit pour tous vos ateliers. Connectez-vous avec votre numéro et votre mot de passe habituels : {info.workshop} sera ajouté à votre espace.</Notice>}
+            {mode === 'new' && <Field label="Nom complet"><Input value={name} onChange={(e) => setName(e.target.value)} required /></Field>}
             <Field label="Numéro de téléphone"><Input value={phone} onChange={(e) => setPhone(e.target.value)} inputMode="tel" required /></Field>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <Field label="Mot de passe"><Input type="password" value={pw} onChange={(e) => setPw(e.target.value)} minLength={6} required autoComplete="new-password" /></Field>
-              <Field label="Confirmer"><Input type="password" value={pw2} onChange={(e) => setPw2(e.target.value)} minLength={6} required autoComplete="new-password" /></Field>
-            </div>
+            {mode === 'existing' ? (
+              <Field label="Mot de passe"><Input type="password" value={pw} onChange={(e) => setPw(e.target.value)} required autoComplete="current-password" /></Field>
+            ) : (
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Field label="Choisir un mot de passe"><Input type="password" value={pw} onChange={(e) => setPw(e.target.value)} minLength={6} required autoComplete="new-password" /></Field>
+                <Field label="Confirmer"><Input type="password" value={pw2} onChange={(e) => setPw2(e.target.value)} minLength={6} required autoComplete="new-password" /></Field>
+              </div>
+            )}
           </>
         )}
         {err && <Notice tone="danger">{err}</Notice>}
-        <Button type="submit" loading={busy}>{isClient ? 'Activer mon espace' : 'Rejoindre'}</Button>
+        {!wrongAccount && <Button type="submit" loading={busy}>{addToSpace ? `Ajouter ${info.workshop}` : isClient ? (mode === 'existing' && !session ? 'Me connecter et ajouter l\'atelier' : 'Activer mon espace') : 'Rejoindre'}</Button>}
       </form>
     </AuthFrame>
   );
