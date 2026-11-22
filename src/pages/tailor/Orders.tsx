@@ -9,7 +9,7 @@ import { paidOf, type Client, type Order, type OrderPayment, type Quote } from '
 import { Avatar, Button, Card, Chips, Empty, Field, Input, KV, List, Loading, Notice, Pill, Row, Section, Select, Sheet, Steps, TopBar, WhatsAppSheet, useToast } from '../../components/ui';
 import { stepPill } from './Home';
 import { orderReceipt, ReceiptSheet } from '../../components/ReceiptSheet';
-import { useCanWrite } from './Clients';
+import { useCanManage, useCanWrite, useTeam } from './Clients';
 
 export function quotePill(s: Quote['status']) {
   return s === 'accepted' ? <Pill tone="ok">Accepté</Pill> : s === 'refused' ? <Pill tone="danger">Refusé</Pill> : s === 'draft' ? <Pill>Brouillon</Pill> : <Pill tone="warn">En attente</Pill>;
@@ -79,10 +79,10 @@ export function OrdersList() {
       <Chips value={f} onChange={setF} options={[['cours', 'En fabrication'], ['pret', 'Prêtes'], ['livre', 'Livrées']]} />
       {list.length ? <List>{list.map((o, i) => (
         <Row key={o.id} onClick={() => nav(`/commandes/${o.id}`)} left={<Avatar name={name(o.client_id)} tone={i} />} title={name(o.client_id)}
-          subtitle={`${o.number} · ${o.title}${o.due_date ? ' · ' + dateFr(o.due_date, { day: 'numeric', month: 'short' }) : ''}`} right={stepPill(o.step)} />
+          subtitle={`${o.number} · ${o.title}${o.due_date ? ' · ' + dateFr(o.due_date, { day: 'numeric', month: 'short' }) : ''}${o.created_by_name ? ' · par ' + o.created_by_name : ''}`} right={stepPill(o.step)} />
       ))}</List> : <Empty icon={ShoppingBag} tone="violet">Rien dans cette liste.</Empty>}
       <Section title="Derniers devis">
-        {data.q.length ? <List>{data.q.map((q) => <Row key={q.id} onClick={() => nav(`/devis/${q.id}`)} title={name(q.client_id)} subtitle={`${q.number} · ${q.title} · ${money(q.total)}`} right={quotePill(q.status)} />)}</List> : <Empty icon={FileText} tone="violet">Aucun devis envoyé.</Empty>}
+        {data.q.length ? <List>{data.q.map((q) => <Row key={q.id} onClick={() => nav(`/devis/${q.id}`)} title={name(q.client_id)} subtitle={`${q.number} · ${q.title} · ${money(q.total)}${q.created_by_name ? ' · par ' + q.created_by_name : ''}`} right={quotePill(q.status)} />)}</List> : <Empty icon={FileText} tone="violet">Aucun devis envoyé.</Empty>}
       </Section>
     </div>
   );
@@ -91,7 +91,6 @@ export function OrdersList() {
 export function OrderDetail() {
   const { id = '' } = useParams();
   const toast = useToast();
-  const canWrite = useCanWrite();
   const { workshop, profile } = useAuth();
   const nav = useNavigate();
   const isOwner = profile?.role === 'tailor_owner';
@@ -112,6 +111,10 @@ export function OrderDetail() {
     ]);
     return { o, c: must(c) as Client, p: must(p) as OrderPayment[] };
   }, [id]);
+  // Modifier : le patron, ou l'employé qui suit ce client
+  const canWrite = useCanManage(data?.c);
+  const wsWritable = useCanWrite();
+  const { responsible, team } = useTeam();
   if (loading || !data) return <Loading />;
   const { o, c, p } = data;
   const paid = paidOf(p, o.id); const rest = Math.max(0, o.price - paid);
@@ -179,7 +182,9 @@ export function OrderDetail() {
         {o.fabric && <div className="text-sm text-white/85">{o.fabric}</div>}
         <div className="mt-4"><Steps step={o.step} light /></div>
         <div className="mt-2 flex justify-between text-sm"><span>{STEPS[o.step]}</span>{o.due_date && <span>Livraison {dateFr(o.due_date, { day: 'numeric', month: 'short' })}</span>}</div>
+        <div className="mt-3 border-t border-white/20 pt-2 text-xs text-white/80">Créée le {dateFr(o.created_at, { day: 'numeric', month: 'long' })}{o.created_by_name ? ` par ${o.created_by_name}` : ''}{team.length > 1 ? ` · client suivi par ${responsible(c.assigned_to)}` : ''}</div>
       </div>
+      {!canWrite && team.length > 1 && wsWritable && <Notice>Commande en lecture seule : ce client est suivi par {responsible(c.assigned_to)}. Seuls {responsible(c.assigned_to)} et le patron peuvent la modifier ou encaisser.</Notice>}
       <div className="grid gap-5 md:grid-cols-2">
         <Card>
           <h2 className="mb-3 font-bold">Fabrication</h2>
@@ -193,7 +198,7 @@ export function OrderDetail() {
         <Card>
           <div className="mb-2 flex items-center justify-between"><h2 className="font-bold">Paiements</h2>{rest > 0 ? <Pill tone="warn">Reste {money(rest)}</Pill> : <Pill tone="ok">Soldé</Pill>}</div>
           <KV k="Prix convenu" v={money(o.price)} />
-          {p.map((x) => <KV key={x.id} k={<>{x.note || 'Paiement'} <span className="text-xs">· {dateFr(x.paid_at, { day: 'numeric', month: 'short' })} · {x.method}</span></>}
+          {p.map((x) => <KV key={x.id} k={<>{x.note || 'Paiement'} <span className="text-xs">· {dateFr(x.paid_at, { day: 'numeric', month: 'short' })} · {x.method}{x.created_by_name ? ` · encaissé par ${x.created_by_name}` : ''}</span></>}
             v={<span className="inline-flex items-center gap-1.5">{money(x.amount)}<button type="button" aria-label={`Reçu ${x.receipt_no ?? ''}`} title="Reçu" onClick={() => setReceiptId(x.id)} className="grid h-7 w-7 place-items-center rounded-lg text-brand-600 hover:bg-brand-50"><ReceiptText className="h-4 w-4" /></button>{isOwner && canWrite && <button type="button" aria-label="Supprimer ce paiement" onClick={() => setDel({ kind: 'pay', id: x.id, amount: x.amount })} className="grid h-7 w-7 place-items-center rounded-lg text-slate-400 hover:bg-red-50 hover:text-red-600"><Trash2 className="h-3.5 w-3.5" /></button>}</span>} />)}
           <KV strong k="Total payé" v={money(paid)} />
           {rest > 0 && canWrite && <Button variant="soft" className="mt-3 w-full" onClick={() => { setAmount(String(rest)); setPayOpen(true); }}><Plus className="h-4 w-4" />Enregistrer un paiement</Button>}
@@ -234,8 +239,13 @@ export function OrderDetail() {
   );
 }
 
+/** Clients qu'on peut choisir pour un devis ou une commande : tous pour le patron, les siens pour un employé. */
 function useClients() {
-  return useLoad(async () => must(await supabase.from('clients').select('*').order('full_name')) as Client[]);
+  const { profile } = useAuth();
+  return useLoad(async () => {
+    const all = must(await supabase.from('clients').select('*').order('full_name')) as Client[];
+    return profile?.role === 'tailor_owner' ? all : all.filter((c) => c.assigned_to === profile?.id);
+  }, [profile?.id]);
 }
 
 export function OrderNew() {
@@ -287,7 +297,6 @@ function quoteText(q: Quote, c: Client, workshopName?: string) {
 export function QuoteDetail() {
   const { id = '' } = useParams();
   const nav = useNavigate();
-  const canWrite = useCanWrite();
   const { workshop } = useAuth();
   const toast = useToast();
   const [wa, setWa] = useState(false);
@@ -301,6 +310,7 @@ export function QuoteDetail() {
     ]);
     return { q, c: must(c) as Client, o: (must(o) as Pick<Order, 'id' | 'number' | 'step'>[])[0] };
   }, [id]);
+  const canWrite = useCanManage(data?.c); // patron ou employé qui suit ce client
   if (error) return <div className="flex flex-col gap-4"><TopBar icon={FileText} tone="violet" title="Devis" back="/commandes" /><Notice>Impossible d'ouvrir ce devis. Vérifiez votre connexion puis réessayez.</Notice></div>;
   if (loading || !data) return <Loading />;
   const { q, c, o } = data;
@@ -325,7 +335,7 @@ export function QuoteDetail() {
         </div>
         <div className="mt-1 text-2xl font-extrabold">{q.title}</div>
         <div className="mt-3 text-3xl font-extrabold tabular-nums">{money(q.total)}</div>
-        <div className="mt-1 text-sm text-white/85">Envoyé le {dateFr(q.created_at, { day: 'numeric', month: 'long' })}{q.responded_at ? ` · réponse le ${dateFr(q.responded_at, { day: 'numeric', month: 'long' })}` : ''}</div>
+        <div className="mt-1 text-sm text-white/85">Envoyé le {dateFr(q.created_at, { day: 'numeric', month: 'long' })}{q.created_by_name ? ` par ${q.created_by_name}` : ''}{q.responded_at ? ` · réponse le ${dateFr(q.responded_at, { day: 'numeric', month: 'long' })}` : ''}</div>
       </div>
       <Card>
         <h2 className="mb-2 font-bold">Détail</h2>

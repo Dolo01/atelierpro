@@ -16,7 +16,7 @@ import { NotifSettings } from '../../components/PushPrompt';
 export function Agenda() {
   const toast = useToast();
   const canWrite = useCanWrite();
-  const { workshop } = useAuth();
+  const { workshop, profile } = useAuth();
   const [open, setOpen] = useState(false);
   const [f, setF] = useState({ client: '', date: new Date().toISOString().slice(0, 10), time: '10:00', purpose: 'Essayage' });
   const [busy, setBusy] = useState(false);
@@ -24,12 +24,16 @@ export function Agenda() {
     const start = new Date(); start.setHours(0, 0, 0, 0);
     const [a, c] = await Promise.all([
       supabase.from('appointments').select('*').gte('starts_at', start.toISOString()).order('starts_at').limit(100),
-      supabase.from('clients').select('id, full_name').order('full_name')
+      supabase.from('clients').select('id, full_name, assigned_to').order('full_name')
     ]);
-    return { a: must(a) as Appointment[], c: must(c) as Pick<Client, 'id' | 'full_name'>[] };
+    return { a: must(a) as Appointment[], c: must(c) as Pick<Client, 'id' | 'full_name' | 'assigned_to'>[] };
   });
   if (loading || !data) return <Loading />;
   const name = (id: string | null) => data.c.find((c) => c.id === id)?.full_name ?? 'Sans client';
+  const isOwner = profile?.role === 'tailor_owner';
+  // le patron gère tout ; un employé gère les rendez-vous de ses clients (et ceux sans client)
+  const manages = (cid: string | null) => isOwner || !cid || data.c.find((c) => c.id === cid)?.assigned_to === profile?.id;
+  const pickable = data.c.filter((c) => manages(c.id));
   const groups = new Map<string, Appointment[]>();
   data.a.forEach((r) => { const k = new Date(r.starts_at).toDateString(); groups.set(k, [...(groups.get(k) ?? []), r]); });
   const save = async (e: FormEvent) => {
@@ -48,14 +52,14 @@ export function Agenda() {
         <Section key={k} title={dateFr(k, { weekday: 'long', day: 'numeric', month: 'long' })}>
           <List>{list.map((r, ri) => (
             <Row key={r.id} left={<span className="grid h-11 w-14 shrink-0 place-items-center rounded-xl text-sm font-extrabold tabular-nums" style={{ background: TONES[(["orange", "teal", "pink", "indigo"] as const)[ri % 4]].bg, color: TONES[(["orange", "teal", "pink", "indigo"] as const)[ri % 4]].text }}>{new Date(r.starts_at).toTimeString().slice(0, 5)}</span>}
-              title={name(r.client_id)} subtitle={r.purpose}
-              right={canWrite ? <button aria-label="Supprimer" onClick={() => del(r.id)} className="grid h-9 w-9 place-items-center rounded-lg text-muted hover:bg-canvas"><Trash2 className="h-4 w-4" /></button> : undefined} />
+              title={name(r.client_id)} subtitle={`${r.purpose}${r.created_by_name ? ' · par ' + r.created_by_name : ''}`}
+              right={canWrite && manages(r.client_id) ? <button aria-label="Supprimer" onClick={() => del(r.id)} className="grid h-9 w-9 place-items-center rounded-lg text-muted hover:bg-canvas"><Trash2 className="h-4 w-4" /></button> : undefined} />
           ))}</List>
         </Section>
       ))}
       <Sheet open={open} onClose={() => setOpen(false)} title="Nouveau rendez-vous">
         <form onSubmit={save} className="flex flex-col gap-4">
-          <Field label="Client"><Select value={f.client} onChange={(e) => setF({ ...f, client: e.target.value })}><option value="">Sans client</option>{data.c.map((c) => <option key={c.id} value={c.id}>{c.full_name}</option>)}</Select></Field>
+          <Field label="Client"><Select value={f.client} onChange={(e) => setF({ ...f, client: e.target.value })}><option value="">Sans client</option>{pickable.map((c) => <option key={c.id} value={c.id}>{c.full_name}</option>)}</Select></Field>
           <div className="grid grid-cols-2 gap-3"><Field label="Jour"><Input type="date" value={f.date} onChange={(e) => setF({ ...f, date: e.target.value })} required /></Field><Field label="Heure"><Input type="time" value={f.time} onChange={(e) => setF({ ...f, time: e.target.value })} required /></Field></div>
           <Field label="Objet"><Input value={f.purpose} onChange={(e) => setF({ ...f, purpose: e.target.value })} /></Field>
           <Button type="submit" loading={busy}>Ajouter</Button>
@@ -268,6 +272,14 @@ export function Reports() {
   const owed = data.o.map((o) => ({ o, rest: o.price - paidOf(data.p, o.id) })).filter((x) => x.rest > 0).sort((a, b) => b.rest - a.rest);
   const name = (id: string) => data.c.find((c) => c.id === id)?.full_name ?? '—';
   const year = new Date().getFullYear();
+  // Qui a encaissé quoi ce mois-ci (contrôle de caisse)
+  const monthStart = new Date(); monthStart.setDate(1); monthStart.setHours(0, 0, 0, 0);
+  const per = new Map<string, { total: number; n: number }>();
+  data.p.filter((x) => new Date(x.paid_at) >= monthStart).forEach((x) => {
+    const k = x.created_by_name || 'Non précisé'; const v = per.get(k) ?? { total: 0, n: 0 };
+    per.set(k, { total: v.total + x.amount, n: v.n + 1 });
+  });
+  const byPerson = [...per.entries()].sort((a, b) => b[1].total - a[1].total);
   return (
     <div className="flex flex-col gap-5">
       <TopBar icon={BarChart3} tone="pink" title="Rapports financiers" back />
@@ -289,6 +301,11 @@ export function Reports() {
           ))}
         </div>
       </Card>
+      {byPerson.length > 1 && (
+        <Section title="Encaissé ce mois, par personne">
+          <List>{byPerson.map(([who, v]) => <Row key={who} left={<Avatar name={who} />} title={who} subtitle={`${v.n} paiement${v.n > 1 ? 's' : ''}`} right={<span className="font-semibold tabular-nums">{money(v.total)}</span>} />)}</List>
+        </Section>
+      )}
       <Section title="Clients avec un solde">
         {owed.length ? <List>{owed.map(({ o, rest }) => <Row key={o.id} onClick={() => nav(`/commandes/${o.id}`)} left={<Avatar name={name(o.client_id)} />} title={name(o.client_id)} subtitle={`${o.number} · ${o.title}`} right={<span className="font-semibold tabular-nums text-amber-700">{money(rest)}</span>} />)}</List> : <Empty icon={CheckCheck} tone="green">Aucun solde en attente.</Empty>}
       </Section>

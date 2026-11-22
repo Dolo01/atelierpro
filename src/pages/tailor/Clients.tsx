@@ -1,13 +1,38 @@
 import { useState, type FormEvent } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { UserPlus, Ruler, FileText, Plus, Send, Users, ShoppingBag } from 'lucide-react';
+import { UserPlus, Ruler, FileText, Plus, Send, Users, ShoppingBag, UserCog, Lock, Check } from 'lucide-react';
 import { supabase, errMsg } from '../../lib/supabase';
 import { must, useAuth, useLoad } from '../../lib/auth';
 import { appUrl, dateFr, displayPhone, MEASURES, money } from '../../lib/format';
-import { accessOf, type Client, type Measurement, type Order, type Quote } from '../../lib/types';
-import { Avatar, Button, Card, Empty, Field, Input, List, Loading, Notice, Pill, Row, Section, Textarea, TopBar, WhatsAppSheet, useToast } from '../../components/ui';
+import { accessOf, type Client, type Measurement, type Order, type Profile, type Quote } from '../../lib/types';
+import { Avatar, Button, Card, Chips, Empty, Field, Input, List, Loading, Notice, Pill, Row, Section, Sheet, Textarea, TopBar, WhatsAppSheet, useToast } from '../../components/ui';
 import { stepPill } from './Home';
 import { quotePill } from './Orders';
+
+/** Membres de l'atelier (patron + employés), pour afficher les noms. */
+export function useTeam() {
+  const { workshop } = useAuth();
+  const { data } = useLoad(async () => must(await supabase.from('profiles').select('id, full_name, role').eq('workshop_id', workshop!.id)) as Pick<Profile, 'id' | 'full_name' | 'role'>[], [workshop?.id]);
+  const team = data ?? [];
+  const owner = team.find((t) => t.role === 'tailor_owner');
+  /** Nom du responsable d'un client (null = le patron). */
+  const responsible = (assigned?: string | null) => assigned ? (team.find((t) => t.id === assigned)?.full_name || 'Employé') : `${owner?.full_name || 'le patron'} (patron)`;
+  return { team, owner, responsible };
+}
+
+/** Peut-on modifier ce client et ce qui le concerne ? Le patron, ou l'employé responsable. */
+export function useCanManage(client?: Pick<Client, 'assigned_to'> | null) {
+  const { profile } = useAuth();
+  const canWrite = useCanWrite();
+  if (!canWrite || !client) return false;
+  return profile?.role === 'tailor_owner' || client.assigned_to === profile?.id;
+}
+
+/** « par Awa » : auteur d'un enregistrement. */
+export function By({ name, prefix = 'par' }: { name?: string | null; prefix?: string }) {
+  if (!name) return null;
+  return <span className="whitespace-nowrap">{prefix} {name}</span>;
+}
 
 export function useCanWrite() {
   const { workshop, profile, overLimit } = useAuth();
@@ -18,16 +43,24 @@ export function useCanWrite() {
 
 export function ClientsList() {
   const nav = useNavigate();
+  const { profile } = useAuth();
+  const { team, responsible } = useTeam();
+  const isOwner = profile?.role === 'tailor_owner';
   const [q, setQ] = useState('');
+  const [who, setWho] = useState<'all' | 'mine'>('all');
   const { data, loading } = useLoad(async () => must(await supabase.from('clients').select('*').order('full_name')) as Client[]);
-  const list = (data ?? []).filter((c) => (c.full_name + c.phone).toLowerCase().includes(q.toLowerCase()));
+  const mine = (c: Client) => (isOwner ? !c.assigned_to : c.assigned_to === profile?.id);
+  const list = (data ?? []).filter((c) => (who === 'all' || mine(c)) && (c.full_name + c.phone).toLowerCase().includes(q.toLowerCase()));
+  const hasTeam = team.length > 1;
   return (
     <div className="flex flex-col gap-4">
       <TopBar icon={Users} tone="green" title="Clients" right={<Button size="sm" onClick={() => nav('/clients/nouveau')}><UserPlus className="h-4 w-4" />Nouveau</Button>} />
       <Input placeholder="Rechercher par nom ou téléphone" value={q} onChange={(e) => setQ(e.target.value)} />
+      {hasTeam && <Chips value={who} onChange={setWho} options={[['all', 'Tous les clients'], ['mine', isOwner ? 'Suivis par moi' : 'Mes clients']]} />}
       {loading ? <Loading /> : !list.length ? <Empty icon={Users} tone="green">{data?.length ? 'Aucun client trouvé.' : 'Ajoutez votre premier client.'}</Empty> : (
         <List>{list.map((c, i) => (
-          <Row key={c.id} onClick={() => nav(`/clients/${c.id}`)} left={<Avatar name={c.full_name} tone={i} />} title={c.full_name} subtitle={c.phone || 'Pas de numéro'}
+          <Row key={c.id} onClick={() => nav(`/clients/${c.id}`)} left={<Avatar name={c.full_name} tone={i} />} title={c.full_name}
+            subtitle={hasTeam ? <><span className={c.assigned_to === profile?.id || (isOwner && !c.assigned_to) ? 'font-bold text-brand-700' : ''}>Suivi par {c.assigned_to === profile?.id || (isOwner && !c.assigned_to) ? 'vous' : responsible(c.assigned_to).replace(' (patron)', '')}</span>{c.phone ? ` · ${c.phone}` : ''}</> : (c.phone || 'Pas de numéro')}
             right={c.user_id ? <Pill tone="ok">Espace actif</Pill> : <Pill>Sans espace</Pill>} />
         ))}</List>
       )}
@@ -64,11 +97,13 @@ export function ClientDetail() {
   const { id = '' } = useParams();
   const nav = useNavigate();
   const toast = useToast();
-  const canWrite = useCanWrite();
-  const { workshop } = useAuth();
+  const { workshop, profile } = useAuth();
+  const { team, responsible } = useTeam();
   const [wa, setWa] = useState<string | null>(null);
   const [inviting, setInviting] = useState(false);
-  const { data, loading } = useLoad(async () => {
+  const [assignOpen, setAssignOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const { data, loading, reload } = useLoad(async () => {
     const [c, m, o, q] = await Promise.all([
       supabase.from('clients').select('*').eq('id', id).single(),
       supabase.from('measurements').select('*').eq('client_id', id).order('taken_at', { ascending: false }).limit(1),
@@ -78,8 +113,18 @@ export function ClientDetail() {
     return { c: must(c) as Client, m: (must(m) as Measurement[])[0], o: must(o) as Order[], q: must(q) as Quote[] };
   }, [id]);
 
+  const canManage = useCanManage(data?.c);
   if (loading || !data) return <Loading />;
   const { c, m } = data;
+  const isOwner = profile?.role === 'tailor_owner';
+  const hasTeam = team.length > 1;
+  const assign = async (pid: string | null) => {
+    setBusy(true);
+    const { error } = await supabase.rpc('assign_client', { p_client_id: c.id, p_profile_id: pid });
+    setBusy(false);
+    if (error) return toast(errMsg(error), 'err');
+    setAssignOpen(false); toast(`${c.full_name} est maintenant suivi par ${pid ? responsible(pid) : 'vous'}`); reload();
+  };
 
   const invite = async () => {
     setInviting(true);
@@ -95,20 +140,28 @@ export function ClientDetail() {
       <Card>
         <div className="flex items-center gap-3">
           <Avatar name={c.full_name} />
-          <div className="min-w-0 flex-1"><div className="font-bold">{c.phone || 'Pas de numéro'}</div><div className="text-xs text-muted">Client depuis {dateFr(c.created_at, { month: 'long', year: 'numeric' })}</div></div>
+          <div className="min-w-0 flex-1"><div className="font-bold">{c.phone || 'Pas de numéro'}</div><div className="text-xs text-muted">Client depuis {dateFr(c.created_at, { month: 'long', year: 'numeric' })}{c.created_by_name ? ` · enregistré par ${c.created_by_name}` : ''}</div></div>
           {c.user_id ? <Pill tone="ok">Espace actif</Pill> : <Pill>Sans espace</Pill>}
         </div>
         {c.notes && <p className="mt-3 text-sm text-muted">{c.notes}</p>}
+        {hasTeam && (
+          <div className="mt-3 flex items-center gap-2 rounded-xl bg-canvas px-3 py-2 text-sm">
+            <UserCog className="h-4 w-4 shrink-0 text-brand-700" />
+            <span className="min-w-0 flex-1">Suivi par <b>{c.assigned_to === profile?.id ? 'vous' : responsible(c.assigned_to)}</b></span>
+            {isOwner && <button type="button" className="shrink-0 font-semibold text-brand-700" onClick={() => setAssignOpen(true)}>Changer</button>}
+          </div>
+        )}
         <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
-          <Button size="sm" variant="ghost" className="!border-transparent !bg-[#EDE9FE] !text-[#5B21B6]" onClick={() => nav(`/devis/nouveau?client=${c.id}`)} disabled={!canWrite}><FileText className="h-4 w-4" />Devis</Button>
-          <Button size="sm" variant="ghost" className="!border-transparent !bg-[#DBEAFE] !text-[#1E40AF]" onClick={() => nav(`/commandes/nouvelle?client=${c.id}`)} disabled={!canWrite}><Plus className="h-4 w-4" />Commande</Button>
+          <Button size="sm" variant="ghost" className="!border-transparent !bg-[#EDE9FE] !text-[#5B21B6]" onClick={() => nav(`/devis/nouveau?client=${c.id}`)} disabled={!canManage}><FileText className="h-4 w-4" />Devis</Button>
+          <Button size="sm" variant="ghost" className="!border-transparent !bg-[#DBEAFE] !text-[#1E40AF]" onClick={() => nav(`/commandes/nouvelle?client=${c.id}`)} disabled={!canManage}><Plus className="h-4 w-4" />Commande</Button>
           <Button size="sm" variant="ghost" className="!border-transparent !bg-[#CCFBF1] !text-[#115E59]" onClick={() => nav(`/clients/${c.id}/mesures`)}><Ruler className="h-4 w-4" />Mesures</Button>
-          {!c.user_id && <Button size="sm" variant="whatsapp" onClick={invite} loading={inviting} disabled={!canWrite || !c.phone}><Send className="h-4 w-4" />Inviter</Button>}
+          {!c.user_id && <Button size="sm" variant="whatsapp" onClick={invite} loading={inviting} disabled={!canManage || !c.phone}><Send className="h-4 w-4" />Inviter</Button>}
         </div>
         {!c.user_id && !c.phone && <p className="mt-2 text-xs text-muted">Ajoutez un numéro WhatsApp pour pouvoir inviter ce client.</p>}
       </Card>
+      {!canManage && hasTeam && <Notice><Lock className="mr-1 inline h-4 w-4" />Ce client est suivi par {responsible(c.assigned_to)}. Vous pouvez consulter sa fiche ; seuls {responsible(c.assigned_to)} et le patron peuvent la modifier.</Notice>}
 
-      <Section title="Mesures" action={<span className="text-xs text-muted">{m ? `Prises le ${dateFr(m.taken_at)}` : ''}</span>}>
+      <Section title="Mesures" action={<span className="text-xs text-muted">{m ? `Prises le ${dateFr(m.taken_at)}${m.created_by_name ? ` par ${m.created_by_name}` : ''}` : ''}</span>}>
         {m ? (
           <>
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
@@ -123,13 +176,22 @@ export function ClientDetail() {
 
       <div className="grid gap-5 md:grid-cols-2">
         <Section title="Commandes">
-          {data.o.length ? <List>{data.o.map((o) => <Row key={o.id} onClick={() => nav(`/commandes/${o.id}`)} title={o.title} subtitle={`${o.number} · ${money(o.price)}`} right={stepPill(o.step)} />)}</List> : <Empty icon={ShoppingBag} tone="indigo">Aucune commande.</Empty>}
+          {data.o.length ? <List>{data.o.map((o) => <Row key={o.id} onClick={() => nav(`/commandes/${o.id}`)} title={o.title} subtitle={`${o.number} · ${money(o.price)}${o.created_by_name ? ` · par ${o.created_by_name}` : ''}`} right={stepPill(o.step)} />)}</List> : <Empty icon={ShoppingBag} tone="indigo">Aucune commande.</Empty>}
         </Section>
         <Section title="Devis">
-          {data.q.length ? <List>{data.q.map((q) => <Row key={q.id} onClick={() => nav(`/devis/${q.id}`)} title={q.title} subtitle={`${q.number} · ${money(q.total)}`} right={quotePill(q.status)} />)}</List> : <Empty icon={FileText} tone="violet">Aucun devis.</Empty>}
+          {data.q.length ? <List>{data.q.map((q) => <Row key={q.id} onClick={() => nav(`/devis/${q.id}`)} title={q.title} subtitle={`${q.number} · ${money(q.total)}${q.created_by_name ? ` · par ${q.created_by_name}` : ''}`} right={quotePill(q.status)} />)}</List> : <Empty icon={FileText} tone="violet">Aucun devis.</Empty>}
         </Section>
       </div>
       <WhatsAppSheet open={!!wa} onClose={() => setWa(null)} to={c.full_name} phone={c.phone} text={wa ?? ''} />
+      <Sheet open={assignOpen} onClose={() => setAssignOpen(false)} title={`Qui suit ${c.full_name} ?`}>
+        <div className="flex flex-col gap-2">
+          <p className="text-sm text-muted">Seuls la personne choisie et vous pourrez modifier ce client, ses mesures, devis, commandes et paiements. Les autres employés pourront seulement le consulter.</p>
+          <List>{[{ id: null as string | null, label: `Moi (${team.find((t) => t.role === 'tailor_owner')?.full_name || 'patron'})` }, ...team.filter((t) => t.role === 'tailor_staff').map((t) => ({ id: t.id as string | null, label: t.full_name || 'Employé' }))].map((o) => (
+            <Row key={o.id ?? 'owner'} onClick={busy ? undefined : () => assign(o.id)} left={<Avatar name={o.label} />} title={o.label}
+              right={(c.assigned_to ?? null) === o.id ? <Check className="h-5 w-5 text-brand-600" /> : undefined} />
+          ))}</List>
+        </div>
+      </Sheet>
     </div>
   );
 }
@@ -137,7 +199,6 @@ export function ClientDetail() {
 export function ClientMeasures() {
   const { id = '' } = useParams();
   const toast = useToast();
-  const canWrite = useCanWrite();
   const { workshop } = useAuth();
   const [edit, setEdit] = useState(false);
   const [vals, setVals] = useState<Record<string, string>>({});
@@ -150,6 +211,7 @@ export function ClientMeasures() {
     return { c: must(c) as Client, list: must(m) as Measurement[] };
   }, [id]);
 
+  const canWrite = useCanManage(data?.c); // patron ou employé responsable du client
   if (loading || !data) return <Loading />;
   const [cur, prev] = data.list;
 
@@ -188,7 +250,7 @@ export function ClientMeasures() {
   return (
     <div className="flex flex-col gap-4">
       <TopBar icon={Ruler} tone="teal" title={`Mesures · ${data.c.full_name}`} back right={canWrite ? <Button size="sm" variant="ghost" onClick={startEdit}>Nouvelle prise</Button> : undefined} />
-      <div className="text-sm text-muted">Fiche du {dateFr(cur.taken_at)}{prev ? ` · comparée au ${dateFr(prev.taken_at)}` : ''}</div>
+      <div className="text-sm text-muted">Fiche du {dateFr(cur.taken_at)}{cur.created_by_name ? `, prise par ${cur.created_by_name}` : ''}{prev ? ` · comparée au ${dateFr(prev.taken_at)}` : ''}</div>
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
         {MEASURES.filter(([k]) => cur.values[k] != null).map(([k, l]) => {
           const d = prev?.values[k] != null ? Math.round((cur.values[k] - prev.values[k]) * 10) / 10 : 0;
@@ -204,7 +266,7 @@ export function ClientMeasures() {
       <Notice tone="warn">Ces mesures sont visibles uniquement par votre atelier et par le client dans son espace.</Notice>
       {data.list.length > 1 && (
         <Section title="Historique">
-          <List>{data.list.slice(1).map((m) => <Row key={m.id} title={`Fiche du ${dateFr(m.taken_at)}`} subtitle={MEASURES.filter(([k]) => m.values[k] != null).slice(0, 4).map(([k, l]) => `${l.replace('Tour de ', '').replace('Longueur ', 'L. ')} ${m.values[k]}`).join(' · ')} />)}</List>
+          <List>{data.list.slice(1).map((m) => <Row key={m.id} title={`Fiche du ${dateFr(m.taken_at)}${m.created_by_name ? ` · par ${m.created_by_name}` : ''}`} subtitle={MEASURES.filter(([k]) => m.values[k] != null).slice(0, 4).map(([k, l]) => `${l.replace('Tour de ', '').replace('Longueur ', 'L. ')} ${m.values[k]}`).join(' · ')} />)}</List>
         </Section>
       )}
     </div>
