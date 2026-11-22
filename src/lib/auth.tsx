@@ -8,6 +8,8 @@ interface AuthState {
   session: Session | null;
   profile: Profile | null;
   workshop: Workshop | null;
+  /** L'atelier a plus de comptes que son forfait ne le permet : les employés sont en lecture seule. */
+  overLimit: boolean;
   loading: boolean;
   refresh: () => Promise<void>;
   signOut: () => Promise<void>;
@@ -19,6 +21,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [workshop, setWorkshop] = useState<Workshop | null>(null);
+  const [overLimit, setOverLimit] = useState(false);
   const [loading, setLoading] = useState(true);
 
   const seq = useRef(0);
@@ -26,14 +29,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const id = ++seq.current; // seul le chargement le plus récent est appliqué
     if (!s) { setProfile(null); setWorkshop(null); setLoading(false); return; }
     const { data: p } = await supabase.from('profiles').select('*').eq('id', s.user.id).maybeSingle();
-    let w: Workshop | null = null;
+    let w: Workshop | null = null; let over = false;
     if (p?.workshop_id) {
-      const r = await supabase.from('workshops').select('*').eq('id', p.workshop_id).maybeSingle();
-      w = r.data as Workshop | null;
+      const [r, o] = await Promise.all([
+        supabase.from('workshops').select('*').eq('id', p.workshop_id).maybeSingle(),
+        supabase.rpc('workshop_over_limit', { wid: p.workshop_id })
+      ]);
+      w = r.data as Workshop | null; over = o.data === true;
     }
     if (id !== seq.current) return;
     setProfile(p as Profile | null);
-    setWorkshop(w);
+    setWorkshop(w); setOverLimit(over);
     setLoading(false);
   }, []);
 
@@ -76,7 +82,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     window.location.replace('/connexion');
   }, []);
 
-  return <Ctx.Provider value={{ session, profile, workshop, loading, refresh, signOut }}>{children}</Ctx.Provider>;
+  return <Ctx.Provider value={{ session, profile, workshop, overLimit, loading, refresh, signOut }}>{children}</Ctx.Provider>;
 }
 
 export function useAuth() {

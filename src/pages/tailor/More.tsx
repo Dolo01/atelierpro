@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { BarChart3, CreditCard, Home as HomeIcon, KeyRound, LogOut, Paperclip, Plus, Trash2, Users, CalendarDays, LayoutGrid, Star, ShieldCheck, Gift, AlertTriangle, User, Crown, Check, Wallet, TrendingUp, Clock, PackageCheck, CheckCheck } from 'lucide-react';
+import { BarChart3, CreditCard, Home as HomeIcon, KeyRound, LogOut, Paperclip, Plus, Trash2, Users, UserMinus, CalendarDays, LayoutGrid, Star, ShieldCheck, Gift, AlertTriangle, User, Crown, Check, Wallet, TrendingUp, Clock, PackageCheck, CheckCheck } from 'lucide-react';
 import { supabase, errMsg } from '../../lib/supabase';
 import { must, useAuth, useLoad } from '../../lib/auth';
 import { appUrl, dateFr, daysLeft, METHODS, money, type MethodKey } from '../../lib/format';
@@ -298,7 +298,7 @@ export function Reports() {
 
 // ---------------- Employés ----------------
 export function Staff() {
-  const { workshop, profile } = useAuth();
+  const { workshop, profile, refresh } = useAuth();
   const toast = useToast();
   const canWrite = useCanWrite();
   const [name, setName] = useState('');
@@ -306,17 +306,22 @@ export function Staff() {
   const [open, setOpen] = useState(false);
   const [wa, setWa] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const { data, loading } = useLoad(async () => {
+  const [removing, setRemoving] = useState<Profile | null>(null);
+  const { data, loading, reload } = useLoad(async () => {
     const [s, p, st] = await Promise.all([
-      supabase.from('profiles').select('*').eq('workshop_id', workshop!.id),
+      supabase.from('profiles').select('*').eq('workshop_id', workshop!.id).order('created_at'),
       workshop?.plan_id ? supabase.from('plans').select('*').eq('id', workshop.plan_id).maybeSingle() : Promise.resolve({ data: null, error: null }),
       supabase.from('platform_settings').select('trial_max_staff').single()
     ]);
     return { staff: must(s) as Profile[], plan: (p.data as Plan | null), trialMax: (st.data as { trial_max_staff: number } | null)?.trial_max_staff ?? 1 };
   }, [workshop?.id]);
   if (loading || !data || !workshop) return <Loading />;
-  const limit = accessOf(workshop) === 'active' ? data.plan?.max_staff ?? 1 : data.trialMax;
-  const can = data.staff.length < limit;
+  const active = accessOf(workshop) === 'active';
+  const limit = active ? data.plan?.max_staff ?? 1 : data.trialMax;
+  const used = data.staff.length;
+  const employees = Math.max(0, limit - 1);
+  const can = used < limit;
+  const over = used > limit;
   const owner = profile?.role === 'tailor_owner';
   const invite = async (e: FormEvent) => {
     e.preventDefault(); setBusy(true);
@@ -326,22 +331,49 @@ export function Staff() {
     setOpen(false);
     setWa(`Bonjour ${name.split(' ')[0]}, ${workshop.name} vous invite à rejoindre l'équipe sur AtelierPro.\nCréez votre accès (lien valable 48 h) :\n${appUrl()}/invitation/${token}`);
   };
+  const remove = async () => {
+    if (!removing) return;
+    setBusy(true);
+    const { error } = await supabase.rpc('remove_staff', { p_profile_id: removing.id });
+    setBusy(false);
+    if (error) return toast(errMsg(error), 'err');
+    toast(`${removing.full_name || 'L\'employé'} n'a plus accès à l'atelier`);
+    setRemoving(null); await reload(); refresh();
+  };
   return (
     <div className="flex max-w-2xl flex-col gap-4">
       <TopBar icon={Users} tone="amber" title="Employés" back />
       <Card>
-        <div className="flex justify-between text-sm"><span className="text-muted">Places utilisées</span><span className="font-bold tabular-nums">{data.staff.length} / {limit}</span></div>
-        <div className="mt-2 flex gap-1">{Array.from({ length: limit }).map((_, i) => <span key={i} className={`h-1.5 flex-1 rounded-full ${i < data.staff.length ? 'bg-brand-600' : 'bg-line'}`} />)}</div>
+        <div className="flex justify-between text-sm"><span className="text-muted">Comptes utilisés (vous compris)</span><span className={`font-bold tabular-nums ${over ? 'text-red-600' : ''}`}>{used} / {limit}</span></div>
+        <div className="mt-2 flex gap-1">{Array.from({ length: Math.max(limit, used) }).map((_, i) => <span key={i} className={`h-1.5 flex-1 rounded-full ${i >= limit ? 'bg-red-400' : i < used ? 'bg-brand-600' : 'bg-line'}`} />)}</div>
+        <div className="mt-2 text-xs text-muted">
+          {active ? `Forfait ${data.plan?.name ?? ''}` : 'Essai gratuit'} : {limit} compte{limit > 1 ? 's' : ''}, soit {employees === 0 ? 'vous seul, sans employé' : `vous + ${employees} employé${employees > 1 ? 's' : ''}`}.{employees > 0 && ' Tous peuvent travailler en même temps, chacun sur son téléphone.'}
+        </div>
       </Card>
-      <List>{data.staff.map((s, i) => <Row key={s.id} left={<Avatar name={s.full_name || '?'} tone={i} />} title={s.full_name || 'Sans nom'} subtitle={s.role === 'tailor_owner' ? 'Propriétaire' : 'Employé'} />)}</List>
+      {over && <Notice tone="warn">{owner
+        ? `Votre ${active ? 'forfait' : 'essai'} permet ${limit} compte${limit > 1 ? 's' : ''}, vous en avez ${used}. Vos employés sont en lecture seule : retirez ${used - limit} employé${used - limit > 1 ? 's' : ''} ou passez à un forfait supérieur.`
+        : `L'atelier a plus de comptes que son forfait ne le permet : votre accès est en lecture seule.`}</Notice>}
+      <List>{data.staff.map((s) => <Row key={s.id} left={<Avatar name={s.full_name || '?'} />} title={s.full_name || 'Sans nom'}
+        subtitle={`${s.role === 'tailor_owner' ? 'Propriétaire' : 'Employé'}${s.phone ? ` · ${s.phone}` : ''}${s.id === profile?.id ? ' · vous' : ''}`}
+        right={owner && s.role === 'tailor_staff' ? <Button size="sm" variant="ghost" onClick={() => setRemoving(s)}><UserMinus className="h-4 w-4" />Retirer</Button> : undefined} />)}</List>
       {owner && (can ? <Button onClick={() => setOpen(true)} disabled={!canWrite}><Plus className="h-4 w-4" />Inviter un employé</Button>
-        : <Notice>Votre {accessOf(workshop) === 'active' ? 'forfait' : 'essai'} inclut {limit} compte(s). Passez à un forfait supérieur pour ajouter des employés.</Notice>)}
+        : !over && <Notice>{employees === 0 ? `Le ${active ? `forfait ${data.plan?.name ?? ''}` : 'forfait actuel'} est prévu pour vous seul.` : `Toutes les places sont prises (${employees} employé${employees > 1 ? 's' : ''}).`} Passez à un forfait supérieur pour ajouter des employés.</Notice>)}
+      {owner && <div className="text-xs text-muted">Un employé peut gérer clients, mesures, devis, commandes, paiements et rendez-vous. Seul vous pouvez inviter ou retirer un employé, supprimer une commande ou un paiement, modifier l'atelier et payer l'abonnement.</div>}
       <Sheet open={open} onClose={() => setOpen(false)} title="Inviter un employé">
         <form onSubmit={invite} className="flex flex-col gap-4">
           <Field label="Nom de l'employé"><Input value={name} onChange={(e) => setName(e.target.value)} required /></Field>
           <Field label="Numéro WhatsApp"><Input value={phone} onChange={(e) => setPhone(e.target.value)} inputMode="tel" required /></Field>
           <Button type="submit" loading={busy}>Créer le lien d'invitation</Button>
         </form>
+      </Sheet>
+      <Sheet open={!!removing} onClose={() => setRemoving(null)} title={`Retirer ${removing?.full_name || 'cet employé'} ?`}>
+        <div className="flex flex-col gap-4">
+          <p className="text-sm text-muted">Il ne pourra plus ouvrir l'atelier ni voir vos clients. Les commandes et paiements qu'il a enregistrés restent dans l'atelier. Vous pourrez le réinviter plus tard.</p>
+          <div className="grid grid-cols-2 gap-2">
+            <Button type="button" variant="ghost" onClick={() => setRemoving(null)}>Annuler</Button>
+            <Button type="button" variant="danger" loading={busy} onClick={remove}><UserMinus className="h-4 w-4" />Retirer</Button>
+          </div>
+        </div>
       </Sheet>
       <WhatsAppSheet open={!!wa} onClose={() => setWa(null)} to={name} phone={phone} text={wa ?? ''} />
     </div>

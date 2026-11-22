@@ -1,4 +1,4 @@
-import { Navigate, Route, Routes } from 'react-router-dom';
+import { Link, Navigate, Route, Routes } from 'react-router-dom';
 import { CreditCard, FileText, Home, Layers, LayoutDashboard, LayoutGrid, Ruler, Settings as Cog, ShoppingBag, Store, Users, Wallet, CalendarDays } from 'lucide-react';
 import { useAuth } from './lib/auth';
 import { accessOf } from './lib/types';
@@ -70,8 +70,22 @@ function Home0() {
   }
 }
 
+/** Plus de comptes que le forfait n'en permet (ex. après l'essai) : on le dit clairement. */
+function OverLimitBanner() {
+  const { profile } = useAuth();
+  const owner = profile?.role === 'tailor_owner';
+  return (
+    <div className="px-4 pt-3 md:px-8">
+      <Link to={owner ? '/plus/employes' : '/accueil'} className="block rounded-2xl bg-amber-100 p-4 text-sm text-amber-900">
+        <div className="font-bold">Trop de comptes pour votre forfait</div>
+        {owner ? 'Vos employés sont en lecture seule. Retirez des employés ou passez à un forfait supérieur ›' : "Votre accès est en lecture seule : l'atelier a plus de comptes que son forfait ne le permet. Prévenez le propriétaire."}
+      </Link>
+    </div>
+  );
+}
+
 function TailorArea() {
-  const { session, profile, workshop, loading } = useAuth();
+  const { session, profile, workshop, overLimit, loading } = useAuth();
   if (loading) return <Loading />;
   if (!session) return <Navigate to="/connexion" replace />;
   if (profile?.role !== 'tailor_owner' && profile?.role !== 'tailor_staff') return <Navigate to="/" replace />;
@@ -79,7 +93,7 @@ function TailorArea() {
   if (accessOf(workshop) === 'suspended') return <Suspended />;
   const expired = accessOf(workshop) === 'expired';
   return <Shell items={tailorNav} notifPath="/notifications" subtitle={workshop.name}
-    banner={expired ? <div className="px-4 pt-3 md:px-8"><SubscriptionBanner /></div> : undefined} />;
+    banner={expired ? <div className="px-4 pt-3 md:px-8"><SubscriptionBanner /></div> : overLimit ? <OverLimitBanner /> : undefined} />;
 }
 function ClientArea() {
   const { session, profile, loading } = useAuth();

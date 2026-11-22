@@ -10,8 +10,10 @@ import { stepPill } from './Home';
 import { quotePill } from './Orders';
 
 export function useCanWrite() {
-  const { workshop } = useAuth();
-  return !!workshop && ['trial', 'active'].includes(accessOf(workshop));
+  const { workshop, profile, overLimit } = useAuth();
+  if (!workshop || !['trial', 'active'].includes(accessOf(workshop))) return false;
+  // employé d'un atelier qui dépasse son nombre de comptes : lecture seule
+  return !(overLimit && profile?.role === 'tailor_staff');
 }
 
 export function ClientsList() {
